@@ -32,10 +32,22 @@ The system emphasizes database design quality, normalization, data integrity, se
   </tr>
 </table>
 
-### Certificate Verification
-![Certificate Verification](docs/screenshots/verification-success.png)
 
-### Dashboard Views
+### Core Functionality
+<table>
+  <tr>
+    <td width="50%">
+      <img src="docs/screenshots/verification-success.png" alt="Certificate Verification" />
+      <p align="center"><b>Public Certificate Verification</b></p>
+    </td>
+    <td width="50%">
+      <img src="docs/screenshots/certificate-display.png" alt="Certificate Details" />
+      <p align="center"><b>Certificate Details</b></p>
+    </td>
+  </tr>
+</table>
+
+### User Dashboards
 <table>
   <tr>
     <td width="50%">
@@ -59,48 +71,31 @@ The system emphasizes database design quality, normalization, data integrity, se
   </tr>
 </table>
 
-### Key Features
+### User Experience Features
 <table>
   <tr>
     <td width="50%">
       <img src="docs/screenshots/email-verification.png" alt="Email Verification Modal" />
-      <p align="center"><b>Email Verification Modal</b></p>
+      <p align="center"><b>Email Verification System</b></p>
     </td>
     <td width="50%">
-      <img src="docs/screenshots/certificate-display.png" alt="Certificate Display" />
-      <p align="center"><b>Certificate Display</b></p>
+      <img src="docs/screenshots/dark-mode.png" alt="Dark Mode" />
+      <p align="center"><b>Dark Mode Support</b></p>
     </td>
   </tr>
 </table>
 
-### Email Notifications
-The system sends automated emails for important events:
-- **Verification Code Email** - Sent after registration with 6-digit OTP
-- **Approval Notification** - Sent when admin approves verifier registration
-
-### Dark Mode Toggle
-![Dark Mode](docs/screenshots/dark-mode.png)
+---
 
 > **Admin Verification Flow:** After email verification, admin approval is required (manual verification of user details through admin dashboard). The system is designed to work without external APIs for maximum reliability.
 
-> **Note:** See [docs/screenshots/README.md](docs/screenshots/README.md) for screenshot capture guide.
 
----
 
 ## ✨ Features
 
-- 🎓 **University Certificate Issuance** - With unique, tamper-proof serial numbers (DEG-YY-SEQ6C format)
-- 🔍 **Public Certificate Verification** - Anyone can verify certificates using Serial Number + Date of Birth
-- 👥 **Four User Roles** - Student, University, Verifier, and Admin with distinct capabilities
-- ✅ **Admin Approval Workflow** - Two-step verification for universities and verifiers with email notifications
-- 🔐 **Secure Authentication** - JWT-based authentication with bcrypt password hashing
-- 📧 **Email Verification System** - 6-digit OTP codes for account verification
-- 🌙 **Dark Mode Support** - Toggle-based theme with persistent localStorage
-- 📊 **Analytics & Audit Trails** - Complete activity logging and verification statistics
-- 🔒 **Privacy-Preserving Design** - Two-factor verification prevents unauthorized access
-- 🎯 **Transaction-Safe Serial Generation** - Row-level locking prevents duplicate certificates
-- 🛡️ **Role-Based Access Control** - Fine-grained permissions for each user type
-- ✉️ **Email Notifications** - Automatic notifications for important events
+- 🔐 **Secure Authentication** - JWT-based authentication with bcrypt password hashing (12 rounds)
+- 📧 **Email Verification System** - 6-digit OTP codes for account verification and admin approvals
+- 🔗 **Automated Notifications** - Email alerts for important system events
 
 ## 🏗️ System Architecture
 
