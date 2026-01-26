@@ -1,0 +1,467 @@
+import React, { useState } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
+import { GraduationCap, UserPlus, Loader2 } from 'lucide-react';
+import api from '../services/api';
+
+const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const Register = () => {
+  const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState('student');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+
+  // Student form state
+  const [studentForm, setStudentForm] = useState({
+    firstName: '',
+    middleName: '',
+    lastName: '',
+    dateOfBirth: '',
+    nid: '',
+    fatherName: '',
+    motherName: '',
+    email: '',
+    password: '',
+    confirmPassword: '',
+    phone: '',
+    presentAddress: ''
+  });
+
+  // University form state
+  const [universityForm, setUniversityForm] = useState({
+    name: '',
+    registrationNumber: '',
+    establishedYear: '',
+    phone: '',
+    address: '',
+    website: '',
+    email: '',
+    password: '',
+    confirmPassword: '',
+    authorityName: '',
+    authorityTitle: 'Vice Chancellor'
+  });
+
+  const resetMessages = () => {
+    setError('');
+    setSuccess('');
+  };
+
+  const validateCommon = (email, password, confirmPassword) => {
+    if (!emailRegex.test(email)) {
+      setError('Please enter a valid email address.');
+      return false;
+    }
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters long.');
+      return false;
+    }
+    if (password !== confirmPassword) {
+      setError('Passwords do not match.');
+      return false;
+    }
+    return true;
+  };
+
+  const handleStudentSubmit = async (e) => {
+    e.preventDefault();
+    resetMessages();
+
+    const {
+      firstName,
+      lastName,
+      dateOfBirth,
+      nid,
+      fatherName,
+      motherName,
+      email,
+      password,
+      confirmPassword,
+      phone,
+      presentAddress
+    } = studentForm;
+
+    // Required field checks
+    if (!firstName || !lastName || !dateOfBirth || !nid || !fatherName || !motherName || !email || !password || !confirmPassword || !phone || !presentAddress) {
+      setError('Please fill in all required fields.');
+      return;
+    }
+
+    if (!validateCommon(email, password, confirmPassword)) return;
+
+    setLoading(true);
+    try {
+      await api.post('/auth/register/student', {
+        ...studentForm
+      });
+      setSuccess('Registration successful! Please login.');
+      setTimeout(() => navigate('/login'), 2000);
+    } catch (err) {
+      const message = err.response?.data?.error || 'Registration failed. Please try again.';
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUniversitySubmit = async (e) => {
+    e.preventDefault();
+    resetMessages();
+
+    const {
+      name,
+      registrationNumber,
+      phone,
+      address,
+      email,
+      password,
+      confirmPassword,
+      authorityName,
+      authorityTitle
+    } = universityForm;
+
+    if (!name || !registrationNumber || !phone || !address || !email || !password || !confirmPassword || !authorityName || !authorityTitle) {
+      setError('Please fill in all required fields.');
+      return;
+    }
+
+    if (!validateCommon(email, password, confirmPassword)) return;
+
+    setLoading(true);
+    try {
+      await api.post('/auth/register/university', {
+        ...universityForm,
+        establishedYear: universityForm.establishedYear || null,
+        website: universityForm.website || null
+      });
+      setSuccess('Registration successful! Please login.');
+      setTimeout(() => navigate('/login'), 2000);
+    } catch (err) {
+      const message = err.response?.data?.error || 'Registration failed. Please try again.';
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const inputBase = 'w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/15';
+  const labelBase = 'text-sm font-semibold text-slate-700';
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-white px-4 py-10">
+      <div className="mx-auto max-w-5xl">
+        <div className="mb-8 flex flex-col items-center gap-3">
+          <img src="/assets/logo.png" alt="EduAuth Registry" className="h-14 w-14 object-cover rounded-2xl shadow-md ring-1 ring-primary/10" />
+          <div className="text-center">
+            <p className="text-xs font-semibold uppercase tracking-wide text-primary">EduAuth Registry</p>
+            <p className="text-base font-semibold text-slate-700">Trusted Digital Certificate Platform</p>
+          </div>
+        </div>
+
+        <div className="rounded-2xl bg-white p-6 shadow-xl ring-1 ring-slate-200">
+          <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-slate-900">Create your account</h1>
+              <p className="text-sm text-slate-600">Register as a student or a university to start issuing and verifying certificates.</p>
+            </div>
+            <div className="flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-primary">
+              Secure • Verified • Auditable
+            </div>
+          </div>
+
+          <div className="mb-6 grid grid-cols-2 gap-2 rounded-xl bg-slate-50 p-1 text-sm font-semibold text-slate-700">
+            <button
+              className={`flex items-center justify-center gap-2 rounded-lg px-4 py-2 transition ${activeTab === 'student' ? 'bg-white shadow-sm ring-1 ring-primary/20 text-primary' : ''}`}
+              onClick={() => { setActiveTab('student'); resetMessages(); }}
+            >
+              <UserPlus className="h-4 w-4" /> Student Registration
+            </button>
+            <button
+              className={`flex items-center justify-center gap-2 rounded-lg px-4 py-2 transition ${activeTab === 'university' ? 'bg-white shadow-sm ring-1 ring-primary/20 text-primary' : ''}`}
+              onClick={() => { setActiveTab('university'); resetMessages(); }}
+            >
+              <GraduationCap className="h-4 w-4" /> University Registration
+            </button>
+          </div>
+
+          {error && (
+            <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {error}
+            </div>
+          )}
+
+          {success && (
+            <div className="mb-4 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+              {success}
+            </div>
+          )}
+
+          {activeTab === 'student' ? (
+            <form onSubmit={handleStudentSubmit} className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <label className={labelBase}>First Name *</label>
+                <input
+                  className={inputBase}
+                  value={studentForm.firstName}
+                  onChange={(e) => setStudentForm({ ...studentForm, firstName: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <label className={labelBase}>Middle Name (Optional)</label>
+                <input
+                  className={inputBase}
+                  value={studentForm.middleName}
+                  onChange={(e) => setStudentForm({ ...studentForm, middleName: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className={labelBase}>Last Name *</label>
+                <input
+                  className={inputBase}
+                  value={studentForm.lastName}
+                  onChange={(e) => setStudentForm({ ...studentForm, lastName: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <label className={labelBase}>Date of Birth *</label>
+                <input
+                  type="date"
+                  className={inputBase}
+                  value={studentForm.dateOfBirth}
+                  onChange={(e) => setStudentForm({ ...studentForm, dateOfBirth: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <label className={labelBase}>NID Number *</label>
+                <input
+                  className={inputBase}
+                  value={studentForm.nid}
+                  onChange={(e) => setStudentForm({ ...studentForm, nid: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <label className={labelBase}>Father's Name *</label>
+                <input
+                  className={inputBase}
+                  value={studentForm.fatherName}
+                  onChange={(e) => setStudentForm({ ...studentForm, fatherName: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <label className={labelBase}>Mother's Name *</label>
+                <input
+                  className={inputBase}
+                  value={studentForm.motherName}
+                  onChange={(e) => setStudentForm({ ...studentForm, motherName: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <label className={labelBase}>Email *</label>
+                <input
+                  type="email"
+                  className={inputBase}
+                  value={studentForm.email}
+                  onChange={(e) => setStudentForm({ ...studentForm, email: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <label className={labelBase}>Password *</label>
+                <input
+                  type="password"
+                  className={inputBase}
+                  value={studentForm.password}
+                  onChange={(e) => setStudentForm({ ...studentForm, password: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <label className={labelBase}>Confirm Password *</label>
+                <input
+                  type="password"
+                  className={inputBase}
+                  value={studentForm.confirmPassword}
+                  onChange={(e) => setStudentForm({ ...studentForm, confirmPassword: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <label className={labelBase}>Phone Number *</label>
+                <input
+                  className={inputBase}
+                  value={studentForm.phone}
+                  onChange={(e) => setStudentForm({ ...studentForm, phone: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="md:col-span-2 space-y-2">
+                <label className={labelBase}>Present Address *</label>
+                <textarea
+                  rows={3}
+                  className={`${inputBase} resize-none`}
+                  value={studentForm.presentAddress}
+                  onChange={(e) => setStudentForm({ ...studentForm, presentAddress: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="md:col-span-2">
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-primary/20 transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-70"
+                >
+                  {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
+                  {loading ? 'Submitting...' : 'Submit Registration'}
+                </button>
+              </div>
+            </form>
+          ) : (
+            <form onSubmit={handleUniversitySubmit} className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <label className={labelBase}>University Name *</label>
+                <input
+                  className={inputBase}
+                  value={universityForm.name}
+                  onChange={(e) => setUniversityForm({ ...universityForm, name: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <label className={labelBase}>Registration Number *</label>
+                <input
+                  className={inputBase}
+                  value={universityForm.registrationNumber}
+                  onChange={(e) => setUniversityForm({ ...universityForm, registrationNumber: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <label className={labelBase}>Established Year</label>
+                <input
+                  type="number"
+                  className={inputBase}
+                  value={universityForm.establishedYear}
+                  onChange={(e) => setUniversityForm({ ...universityForm, establishedYear: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className={labelBase}>Phone *</label>
+                <input
+                  className={inputBase}
+                  value={universityForm.phone}
+                  onChange={(e) => setUniversityForm({ ...universityForm, phone: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="md:col-span-2 space-y-2">
+                <label className={labelBase}>Address *</label>
+                <textarea
+                  rows={3}
+                  className={`${inputBase} resize-none`}
+                  value={universityForm.address}
+                  onChange={(e) => setUniversityForm({ ...universityForm, address: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <label className={labelBase}>Website (Optional)</label>
+                <input
+                  className={inputBase}
+                  value={universityForm.website}
+                  onChange={(e) => setUniversityForm({ ...universityForm, website: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className={labelBase}>Email *</label>
+                <input
+                  type="email"
+                  className={inputBase}
+                  value={universityForm.email}
+                  onChange={(e) => setUniversityForm({ ...universityForm, email: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <label className={labelBase}>Password *</label>
+                <input
+                  type="password"
+                  className={inputBase}
+                  value={universityForm.password}
+                  onChange={(e) => setUniversityForm({ ...universityForm, password: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <label className={labelBase}>Confirm Password *</label>
+                <input
+                  type="password"
+                  className={inputBase}
+                  value={universityForm.confirmPassword}
+                  onChange={(e) => setUniversityForm({ ...universityForm, confirmPassword: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <label className={labelBase}>Authority Name *</label>
+                <input
+                  className={inputBase}
+                  value={universityForm.authorityName}
+                  onChange={(e) => setUniversityForm({ ...universityForm, authorityName: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <label className={labelBase}>Authority Title *</label>
+                <input
+                  className={inputBase}
+                  value={universityForm.authorityTitle}
+                  onChange={(e) => setUniversityForm({ ...universityForm, authorityTitle: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="md:col-span-2">
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-primary/20 transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-70"
+                >
+                  {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <GraduationCap className="h-4 w-4" />}
+                  {loading ? 'Submitting...' : 'Submit Registration'}
+                </button>
+              </div>
+            </form>
+          )}
+
+          <div className="mt-6 text-center text-sm text-slate-600">
+            Already have an account?{' '}
+            <Link to="/login" className="font-semibold text-primary hover:text-primary-hover">
+              Sign In
+            </Link>
+          </div>
+
+          {/* Verifier Registration Section */}
+          <div className="mt-8 bg-slate-50 border border-slate-200 rounded-lg p-6">
+            <p className="text-slate-700 mb-4">
+              Are you an employer or institution verifying certificates?
+            </p>
+            <button
+              onClick={() => navigate('/verifier-register')}
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors"
+            >
+              Register as Verifier
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default Register;
