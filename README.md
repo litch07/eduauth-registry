@@ -86,6 +86,19 @@ The system emphasizes database design quality, normalization, data integrity, se
 </table>
 
 ---
+### Email Notifications
+<table>
+  <tr>
+    <td width="50%">
+      <img src="docs/screenshots/Gmail - Verify Your EduAuth Registry Account.png" alt="Verification Email" />
+      <p align="center"><b>Email Verification Code (OTP)</b></p>
+    </td>
+    <td width="50%">
+      <img src="docs/screenshots/Gmail - Your EduAuth Account Has Been Approved.png" alt="Approval Email" />
+      <p align="center"><b>Account Approval Notification</b></p>
+    </td>
+  </tr>
+</table>
 
 > **Admin Verification Flow:** After email verification, admin approval is required (manual verification of user details through admin dashboard). The system is designed to work without external APIs for maximum reliability.
 
@@ -559,3 +572,4 @@ For support, questions, or bug reports:
 **⭐ If you find this project useful, please consider giving it a star!**
 
 Made with ❤️ for academic excellence.
+
