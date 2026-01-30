@@ -521,7 +521,8 @@ This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) 
 
 ## 👨‍💻 Author
 
-**Sadid Ahmed** [![GitHub Profile](https://img.shields.io/badge/GitHub-litch07-ace?style=for-the-badge&logo=github)](https://github.com/litch07)
+**Sadid Ahmed**
+[github.com/litch07](https://github.com/litch07)
 
 ## 🙏 Acknowledgments
 
