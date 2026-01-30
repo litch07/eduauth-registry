@@ -519,9 +519,9 @@ Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) file for details.
 
-## 👨‍💻 Authors
+## 👨‍💻 Author
 
-- **Your Name** - *Initial work* - [GitHub Profile](https://github.com/YOUR-USERNAME)
+**Sadid Ahmed** [![GitHub Profile](https://img.shields.io/badge/GitHub-litch07-ace?style=for-the-badge&logo=github)](https://github.com/litch07)
 
 ## 🙏 Acknowledgments
 
@@ -532,7 +532,7 @@ This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) 
 ## 📞 Support
 
 For support, questions, or bug reports:
-- 📧 Email: your-email@example.com
+- 📧 Email: ssadidahmed01@gmail.com
 - 🐛 Open an [Issue](https://github.com/litch07/eduauth-registry/issues)
 - 💬 Discuss in [Discussions](https://github.com/litch07/eduauth-registry/discussions)
 
