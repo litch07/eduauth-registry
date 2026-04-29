@@ -20,8 +20,7 @@ EduAuth Registry is a university certificate and document verification platform 
 
 - `frontend/` - React UI
 - `backend/` - Laravel API
-- `database/` - SQL schema and setup notes
-- `TEAM_WORKFLOW.md` - Git and collaboration guide
+- `database/` - SQL schema
 
 ## Setup
 
