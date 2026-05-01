@@ -83,6 +83,103 @@ CREATE TABLE personal_access_tokens (
   INDEX idx_personal_access_tokens_tokenable (tokenable_type, tokenable_id)
 );
 
+CREATE TABLE certificate_sequences (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  sequence_key VARCHAR(255) NOT NULL UNIQUE,
+  prefix VARCHAR(20) NOT NULL DEFAULT 'BSC',
+  year_suffix VARCHAR(2) NOT NULL,
+  current_sequence BIGINT UNSIGNED NOT NULL DEFAULT 0,
+  last_generated_at TIMESTAMP NULL,
+  created_at TIMESTAMP NULL,
+  updated_at TIMESTAMP NULL,
+  INDEX idx_sequence_prefix_year (prefix, year_suffix)
+);
+
+CREATE TABLE certificates (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  student_id BIGINT UNSIGNED NOT NULL,
+  institution_id BIGINT UNSIGNED NOT NULL,
+  issued_by BIGINT UNSIGNED NOT NULL,
+  revoked_by BIGINT UNSIGNED NULL,
+  restored_by BIGINT UNSIGNED NULL,
+  serial VARCHAR(255) NOT NULL UNIQUE,
+  degree_title VARCHAR(255) NOT NULL,
+  program_name VARCHAR(255) NULL,
+  major VARCHAR(255) NULL,
+  registration_no VARCHAR(100) NULL,
+  cgpa DECIMAL(4,2) NULL,
+  issue_date DATE NOT NULL,
+  completion_date DATE NULL,
+  pdf_path VARCHAR(255) NULL,
+  is_public TINYINT(1) NOT NULL DEFAULT 1,
+  revoked_at TIMESTAMP NULL,
+  revocation_reason TEXT NULL,
+  restored_at TIMESTAMP NULL,
+  restoration_reason TEXT NULL,
+  created_at TIMESTAMP NULL,
+  updated_at TIMESTAMP NULL,
+  deleted_at TIMESTAMP NULL,
+  INDEX idx_certificates_student_institution (student_id, institution_id),
+  INDEX idx_certificates_degree_issue (degree_title, issue_date),
+  INDEX idx_certificates_is_public (is_public),
+  INDEX idx_certificates_revoked_at (revoked_at),
+  CONSTRAINT fk_certificates_student FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE,
+  CONSTRAINT fk_certificates_institution FOREIGN KEY (institution_id) REFERENCES institutions(id) ON DELETE CASCADE,
+  CONSTRAINT fk_certificates_issued_by FOREIGN KEY (issued_by) REFERENCES users(id) ON DELETE CASCADE,
+  CONSTRAINT fk_certificates_revoked_by FOREIGN KEY (revoked_by) REFERENCES users(id) ON DELETE SET NULL,
+  CONSTRAINT fk_certificates_restored_by FOREIGN KEY (restored_by) REFERENCES users(id) ON DELETE SET NULL
+);
+
+CREATE TABLE email_verification_codes (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  user_id BIGINT UNSIGNED NULL UNIQUE,
+  email VARCHAR(255) NOT NULL UNIQUE,
+  code_hash VARCHAR(255) NOT NULL,
+  expires_at TIMESTAMP NOT NULL,
+  verified_at TIMESTAMP NULL,
+  attempts TINYINT UNSIGNED NOT NULL DEFAULT 0,
+  created_at TIMESTAMP NULL,
+  updated_at TIMESTAMP NULL,
+  INDEX idx_email_verification_email_expires (email, expires_at),
+  CONSTRAINT fk_email_verification_user_id FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+);
+
+CREATE TABLE verification_logs (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  certificate_id BIGINT UNSIGNED NULL,
+  verifier_user_id BIGINT UNSIGNED NULL,
+  serial VARCHAR(255) NOT NULL,
+  entered_date_of_birth DATE NULL,
+  matched_by_dob TINYINT(1) NOT NULL DEFAULT 0,
+  verification_result VARCHAR(40) NOT NULL,
+  verified_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  ip_address VARCHAR(45) NULL,
+  user_agent TEXT NULL,
+  details TEXT NULL,
+  created_at TIMESTAMP NULL,
+  updated_at TIMESTAMP NULL,
+  INDEX idx_verification_logs_serial_result (serial, verification_result),
+  INDEX idx_verification_logs_verifier_verified (verifier_user_id, verified_at),
+  CONSTRAINT fk_verification_logs_certificate_id FOREIGN KEY (certificate_id) REFERENCES certificates(id) ON DELETE SET NULL,
+  CONSTRAINT fk_verification_logs_verifier_user_id FOREIGN KEY (verifier_user_id) REFERENCES users(id) ON DELETE SET NULL
+);
+
+CREATE TABLE activity_logs (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  user_id BIGINT UNSIGNED NULL,
+  action VARCHAR(255) NOT NULL,
+  entity_type VARCHAR(255) NULL,
+  entity_id BIGINT UNSIGNED NULL,
+  description TEXT NOT NULL,
+  metadata JSON NULL,
+  ip_address VARCHAR(45) NULL,
+  created_at TIMESTAMP NULL,
+  updated_at TIMESTAMP NULL,
+  INDEX idx_activity_logs_action_entity (action, entity_type),
+  INDEX idx_activity_logs_user_created (user_id, created_at),
+  CONSTRAINT fk_activity_logs_user_id FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+);
+
 -- All Users
 INSERT INTO users (id, email, password, role, email_verified_at, is_approved, approved_by, approved_at, created_at, updated_at) VALUES
 (1, 'eduauthregistry@gmail.com', '$2y$12$qsbFzh9ntiSnow8vI0y4DudEaHYR0bI0HzQWjxFjF4pCUIn68P/Sm', 'admin', NOW(), 1, NULL, NOW(), NOW(), NOW()),
@@ -109,3 +206,18 @@ INSERT INTO verifiers (id, user_id, company_name, contact_person, email, phone, 
 (1, 6, 'Enosis Solutions', 'HR Dept', 'demo@enosis.com', '+8801700000001', 'Background Check', NOW(), NOW()),
 (2, 7, 'Brain Station 23', 'Recruitment', 'demo@brainstation-23.com', '+8801700000002', 'Credential Verification', NOW(), NOW()),
 (3, 8, 'PhaseShift', 'Sadid Ahmed', 'ssadidahmed07@gmail.com', '+8801700000003', 'Project Audit', NOW(), NOW());
+
+-- Certificate Sequence
+INSERT INTO certificate_sequences (id, sequence_key, prefix, year_suffix, current_sequence, created_at, updated_at) VALUES
+(1, 'certificate_serial', 'BSC', '26', 3, NOW(), NOW());
+
+-- Certificates
+INSERT INTO certificates (id, student_id, institution_id, issued_by, serial, degree_title, program_name, major, registration_no, cgpa, issue_date, completion_date, is_public, created_at, updated_at) VALUES
+-- Certificate for Sadid (Major: Cybersecurity)
+(1, 1, 1, 2, 'BSC-26-0001', 'Bachelor of Science', 'Computer Science and Engineering', 'Cybersecurity', '0112330154', 3.85, '2026-02-15', '2026-01-10', 1, NOW(), NOW()),
+
+-- Certificate for Sayem (Major: Data Science)
+(2, 2, 1, 2, 'BSC-26-0002', 'Bachelor of Science', 'Computer Science and Engineering', 'Data Science', '0112330411', 3.90, '2026-02-15', '2026-01-10', 1, NOW(), NOW()),
+
+-- Certificate for Junel (Major: Software Engineering)
+(3, 3, 1, 2, 'BSC-26-0003', 'Bachelor of Science', 'Computer Science and Engineering', 'Software Engineering', '0112230442', 3.80, '2026-02-15', '2026-01-10', 1, NOW(), NOW());
