@@ -198,7 +198,7 @@ If you still run into issues, check `storage/logs/laravel.log` for errors and th
 
 ## API Documentation
 
-See `API_DOCUMENTATION.md` for a concise list of API endpoints, grouped by role and purpose.
+See [API Documentation](API_DOCUMENTATION.md) for a concise list of API endpoints, grouped by role and purpose.
 
 ## Team PhaseShift
 
