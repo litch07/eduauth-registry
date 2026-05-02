@@ -34,11 +34,11 @@ This repository contains a full-stack application with a Laravel backend, a Reac
 
 Before you begin, make sure these tools are installed:
 
-- PHP 8.2 or later
-- Composer
-- Node.js 18 or later
-- npm
-- MySQL 8 or XAMPP with MySQL
+- PHP 8.2 or later — verify: `php -v` — download: https://www.php.net/downloads.php
+- Composer — verify: `composer --version` — download: https://getcomposer.org/download/
+- Node.js 18 or later — verify: `node -v` — download: https://nodejs.org/
+- npm — verify: `npm -v` — download: https://www.npmjs.com/get-npm
+- MySQL 8 or XAMPP with MySQL — verify: `mysql --version` — download: https://dev.mysql.com/downloads/mysql/
 
 ## Clone The Repository
 
@@ -60,9 +60,9 @@ The SQL file already includes the starter data for local use, so there is no sep
 
 ## Backend Setup
 
-The backend is a Laravel application and requires PHP, Composer, and a `.env` file. Follow one of the options below depending on your environment.
+The backend is a Laravel application and requires PHP, Composer, and a `.env` file. Commands vary slightly by OS — follow the block that matches your environment.
 
-Windows (PowerShell) — if `composer` is installed globally:
+Windows (PowerShell):
 
 ```powershell
 cd backend
@@ -86,13 +86,9 @@ php artisan serve --host=127.0.0.1 --port=8000
 
 Quick notes and recommendations:
 
-- If Composer is not on your PATH, install it from https://getcomposer.org/download/ before proceeding.
 - Do NOT commit the `vendor/` directory to this repository. Committing vendor folders will bloat the repo and make it harder for others to contribute.
 - After copying `.env.example` to `.env`, update the DB values to match your local MySQL, or import `database/eduauth_registry.sql` if you want the seeded demo data.
-- Use `php artisan migrate --force` in scripts/CI; locally you can omit `--force`.
 - Confirm `APP_URL` and `SANCTUM_STATEFUL_DOMAINS` in `.env` for authentication and CORS when running frontend locally.
-
-
 
 ## Frontend Setup
 
