@@ -7,7 +7,7 @@ use Illuminate\Foundation\Http\Kernel as HttpKernel;
 class Kernel extends HttpKernel
 {
     protected $middleware = [
-        //
+        \Illuminate\Http\Middleware\HandleCors::class,
     ];
 
     protected $middlewareGroups = [
@@ -21,6 +21,7 @@ class Kernel extends HttpKernel
     ];
 
     protected $middlewareAliases = [
+        'auth' => \Illuminate\Auth\Middleware\Authenticate::class,
         'role' => \App\Http\Middleware\CheckRole::class,
     ];
 }

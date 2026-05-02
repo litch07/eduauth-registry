@@ -17,7 +17,7 @@ class CertificateController extends Controller
     public function store(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'student_id' => 'required|exists:students,id',
+            'student_id' => 'required|string|max:50',
             'degree_title' => 'required|string|max:255',
             'program_name' => 'nullable|string|max:255',
             'major' => 'nullable|string|max:255',
@@ -25,7 +25,6 @@ class CertificateController extends Controller
             'cgpa' => 'nullable|numeric|min:0|max:4',
             'issue_date' => 'required|date',
             'completion_date' => 'nullable|date|after_or_equal:issue_date',
-            'is_public' => 'boolean',
         ]);
 
         if ($validator->fails()) {
@@ -39,9 +38,23 @@ class CertificateController extends Controller
         }
 
         $payload = $validator->validated();
+        $studentIdentifier = trim($payload['student_id']);
+        $student = Student::query()
+            ->where('student_id', $studentIdentifier)
+            ->orWhere('id', is_numeric($studentIdentifier) ? (int) $studentIdentifier : 0)
+            ->first();
+
+        if (!$student) {
+            return response()->json([
+                'error' => 'Student not found. Please enter a valid student ID.',
+                'errors' => [
+                    'student_id' => ['Student not found. Please check the student ID and try again.'],
+                ],
+            ], 422);
+        }
 
         try {
-            $certificate = DB::transaction(function () use ($payload, $institution, $request) {
+            $certificate = DB::transaction(function () use ($payload, $institution, $request, $student) {
                 $sequence = CertificateSequence::where('sequence_key', 'certificate_serial')->lockForUpdate()->first();
 
                 if (!$sequence) {
@@ -66,7 +79,7 @@ class CertificateController extends Controller
                 $serial = $this->generateSerial($sequence);
 
                 $certificate = Certificate::create([
-                    'student_id' => $payload['student_id'],
+                    'student_id' => $student->id,
                     'institution_id' => $institution->id,
                     'issued_by' => $request->user()->id,
                     'serial' => $serial,
@@ -77,7 +90,7 @@ class CertificateController extends Controller
                     'cgpa' => $payload['cgpa'] ?? null,
                     'issue_date' => $payload['issue_date'],
                     'completion_date' => $payload['completion_date'] ?? null,
-                    'is_public' => $payload['is_public'] ?? true,
+                    'is_public' => true,
                 ]);
 
                 ActivityLog::create([
@@ -95,7 +108,7 @@ class CertificateController extends Controller
                 ]);
 
                 return $certificate;
-            });
+            }, 3);
 
             return response()->json([
                 'message' => 'Certificate issued successfully.',
