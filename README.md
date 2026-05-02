@@ -60,43 +60,46 @@ The SQL file already includes the starter data for local use, so there is no sep
 
 ## Backend Setup
 
+The backend is a Laravel application and requires PHP, Composer, and a `.env` file. Follow one of the options below depending on your environment.
+
+Windows (PowerShell) — if `composer` is installed globally:
+
 ```powershell
 cd backend
 composer install
-copy .env.example .env
+Copy-Item .env.example .env
 php artisan key:generate
 php artisan migrate
+php artisan serve --host=127.0.0.1 --port=8000
 ```
 
-After creating the backend `.env` file, update these values to match your local database:
+macOS / Linux:
 
-```env
-DB_CONNECTION=mysql
-DB_HOST=127.0.0.1
-DB_PORT=3306
-DB_DATABASE=eduauth_registry
-DB_USERNAME=root
-DB_PASSWORD=
+```bash
+cd backend
+composer install
+cp .env.example .env
+php artisan key:generate
+php artisan migrate
+php artisan serve --host=127.0.0.1 --port=8000
 ```
 
-To start the backend during development:
+Quick notes and recommendations:
 
-```powershell
-php artisan serve
-```
+- If Composer is not on your PATH, install it from https://getcomposer.org/download/ before proceeding.
+- Do NOT commit the `vendor/` directory to this repository. Committing vendor folders will bloat the repo and make it harder for others to contribute.
+- After copying `.env.example` to `.env`, update the DB values to match your local MySQL, or import `database/eduauth_registry.sql` if you want the seeded demo data.
+- Use `php artisan migrate --force` in scripts/CI; locally you can omit `--force`.
+- Confirm `APP_URL` and `SANCTUM_STATEFUL_DOMAINS` in `.env` for authentication and CORS when running frontend locally.
 
-You can also use the Laravel development workflow if you want the server and related services together:
 
-```powershell
-composer run dev
-```
 
 ## Frontend Setup
 
 ```powershell
 cd frontend
 npm install
-copy .env.example .env
+Copy-Item .env.example .env
 npm run dev
 ```
 
