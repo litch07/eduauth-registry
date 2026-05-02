@@ -128,16 +128,16 @@ This section describes how to use the system and includes test credentials for a
 
 The SQL import (`database/eduauth_registry.sql`) includes seeded accounts for testing. Use the emails below with the password `password` (local seed default). If a seeded password does not work, see the Troubleshooting section for how to reset a user's password.
 
-- Admin: `eduauthregistry@gmail.com` — password: `password`
-- University: `admin@uiu.ac.bd` — password: `password`
+- Admin: `eduauthregistry@gmail.com` — password: `admin123`
+- University: `admin@uiu.ac.bd` — password: `password123`
 - Students:
-	- `ssadidahmed01@gmail.com` — password: `password`
-	- `sayem23cse@gmail.com` — password: `password`
-	- `mnur223442@bscse.uiu.ac.bd` — password: `password`
+	- `ssadidahmed01@gmail.com` — password: `password123`
+	- `sayem23cse@gmail.com` — password: `password123`
+	- `mnur223442@bscse.uiu.ac.bd` — password: `password123`
 - Verifiers:
-	- `demo@enosis.com` — password: `password`
-	- `demo@brainstation-23.com` — password: `password`
-	- `ssadidahmed07@gmail.com` — password: `password`
+	- `demo@enosis.com` — password: `password123`
+	- `demo@brainstation-23.com` — password: `password123`
+	- `ssadidahmed07@gmail.com` — password: `password123`
 
 If a password doesn't work, reset it using the tinker command in the Troubleshooting section.
 
