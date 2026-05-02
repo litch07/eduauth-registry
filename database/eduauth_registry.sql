@@ -144,6 +144,21 @@ CREATE TABLE email_verification_codes (
   CONSTRAINT fk_email_verification_user_id FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
 );
 
+CREATE TABLE pending_registrations (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  email VARCHAR(255) NOT NULL UNIQUE,
+  user_name VARCHAR(255) NOT NULL,
+  registration_role VARCHAR(50) NOT NULL,
+  code_hash VARCHAR(255) NOT NULL,
+  registration_data JSON NOT NULL,
+  expires_at TIMESTAMP NOT NULL,
+  verified_at TIMESTAMP NULL,
+  attempts INT UNSIGNED NOT NULL DEFAULT 0,
+  created_at TIMESTAMP NULL,
+  updated_at TIMESTAMP NULL,
+  INDEX idx_pending_registrations_email_expires (email, expires_at)
+);
+
 CREATE TABLE verification_logs (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   certificate_id BIGINT UNSIGNED NULL,
