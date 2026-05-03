@@ -11,13 +11,11 @@ export default function DashboardLayout({ children }) {
       <Navbar onMenuClick={() => setSidebarOpen((current) => !current)} />
       <div className="flex">
         <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-        <main className="flex-1 px-4 py-6 lg:ml-72 lg:px-8">
-          <div className="mx-auto max-w-7xl space-y-6">{children}</div>
+        <main className="min-w-0 flex-1 px-4 py-6 lg:px-8">
+          <div className="mx-auto max-w-6xl space-y-6">{children}</div>
         </main>
       </div>
-      <div className="lg:ml-72">
-        <Footer />
-      </div>
+      <Footer />
     </div>
   );
 }
