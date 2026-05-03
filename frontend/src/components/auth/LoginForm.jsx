@@ -32,9 +32,8 @@ export default function LoginForm() {
   return (
     <div className="mx-auto w-full max-w-md space-y-8 rounded-3xl border border-white/10 bg-white/90 p-8 shadow-2xl shadow-slate-900/10 backdrop-blur dark:bg-gray-900/80">
       <div className="space-y-2 text-center">
-        <p className="text-sm font-semibold uppercase tracking-[0.3em] text-primary-600">EduAuth Registry</p>
+        <p className="text-sm font-semibold uppercase tracking-[0.15em] text-primary-600">EduAuth Registry</p>
         <h2 className="text-3xl font-bold text-gray-900 dark:text-white">Sign in</h2>
-        <p className="text-sm text-gray-600 dark:text-gray-400">Secure certificate management and verification</p>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-5">

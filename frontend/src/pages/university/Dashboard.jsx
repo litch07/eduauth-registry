@@ -2,14 +2,17 @@ import { useEffect, useState } from 'react';
 import { FilePlus2, School, ShieldCheck, AlertTriangle } from 'lucide-react';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import Card from '../../components/shared/Card';
+import StatCard from '../../components/shared/StatCard';
 import LoadingSpinner from '../../components/shared/LoadingSpinner';
 import api from '../../services/api';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../contexts/AuthContext';
 
 export default function UniversityDashboard() {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   useEffect(() => {
     const fetchDashboard = async () => {
@@ -34,23 +37,28 @@ export default function UniversityDashboard() {
     <DashboardLayout>
       <div className="space-y-6">
         <div>
-          <p className="text-sm font-semibold uppercase tracking-[0.3em] text-primary-600">University Dashboard</p>
-          <h1 className="mt-2 text-3xl font-bold text-gray-900 dark:text-white">Institution overview</h1>
+          <p className="text-sm font-semibold uppercase tracking-[0.15em] text-primary-600">University Dashboard</p>
+          <h1 className="mt-2 text-2xl font-bold text-gray-900 dark:text-white sm:text-3xl">
+            Welcome back{user?.name ? `, ${user.name}` : ''}
+          </h1>
         </div>
 
-        <div className="grid gap-6 md:grid-cols-3">
-          <Card><div className="flex items-center justify-between gap-4"><div><p className="text-sm text-gray-500 dark:text-gray-400">Total Certificates</p><p className="mt-2 text-3xl font-bold">{stats?.stats?.total_certificates ?? 0}</p></div><School className="h-12 w-12 text-primary-600" /></div></Card>
-          <Card><div className="flex items-center justify-between gap-4"><div><p className="text-sm text-gray-500 dark:text-gray-400">Active Certificates</p><p className="mt-2 text-3xl font-bold">{stats?.stats?.active_certificates ?? 0}</p></div><ShieldCheck className="h-12 w-12 text-green-600" /></div></Card>
-          <Card><div className="flex items-center justify-between gap-4"><div><p className="text-sm text-gray-500 dark:text-gray-400">Revoked Certificates</p><p className="mt-2 text-3xl font-bold">{stats?.stats?.revoked_certificates ?? 0}</p></div><AlertTriangle className="h-12 w-12 text-yellow-600" /></div></Card>
+        <div className="grid gap-4 sm:grid-cols-3">
+          <StatCard icon={<School className="h-5 w-5" />} label="Total Certificates" value={stats?.stats?.total_certificates ?? 0} color="primary" />
+          <StatCard icon={<ShieldCheck className="h-5 w-5" />} label="Active Certificates" value={stats?.stats?.active_certificates ?? 0} color="green" />
+          <StatCard icon={<AlertTriangle className="h-5 w-5" />} label="Revoked Certificates" value={stats?.stats?.revoked_certificates ?? 0} color="yellow" />
         </div>
 
         <Card>
           <div className="flex items-center justify-between gap-4">
             <div>
-              <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Issue a new certificate</h2>
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Issue a new certificate</h2>
               <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Generate and assign a certificate for an enrolled student.</p>
             </div>
-            <button onClick={() => navigate('/university/issue-certificate')} className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 font-medium text-white hover:bg-primary-700">
+            <button
+              onClick={() => navigate('/university/issue-certificate')}
+              className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-primary-700"
+            >
               <FilePlus2 className="h-4 w-4" />
               Issue
             </button>

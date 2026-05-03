@@ -21,8 +21,8 @@ export default function EmailVerification() {
 
     try {
       await authService.verifyEmail(email, code);
-      setMessage('Email verified successfully. Redirecting to login...');
-      setTimeout(() => navigate('/login'), 1200);
+      setMessage('Email verified successfully. Redirecting...');
+      setTimeout(() => navigate('/email-verified'), 1200);
     } catch (err) {
       setError(err.response?.data?.error || 'Verification failed');
     } finally {
@@ -34,7 +34,7 @@ export default function EmailVerification() {
     <div className="min-h-screen bg-gray-50 px-4 py-12 dark:bg-gray-950 sm:px-6 lg:px-8">
       <Card className="mx-auto max-w-xl space-y-6">
         <div className="space-y-2 text-center">
-          <p className="text-sm font-semibold uppercase tracking-[0.3em] text-primary-600">Verify email</p>
+          <p className="text-sm font-semibold uppercase tracking-[0.15em] text-primary-600">Verify email</p>
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Confirm your registration</h1>
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">
