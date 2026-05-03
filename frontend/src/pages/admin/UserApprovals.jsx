@@ -40,7 +40,7 @@ export default function UserApprovals() {
     <DashboardLayout>
       <div className="space-y-6">
         <div>
-          <p className="text-sm font-semibold uppercase tracking-[0.3em] text-primary-600">Approvals</p>
+          <p className="text-sm font-semibold uppercase tracking-[0.15em] text-primary-600">Approvals</p>
           <h1 className="mt-2 text-3xl font-bold text-gray-900 dark:text-white">Pending user registrations</h1>
         </div>
 

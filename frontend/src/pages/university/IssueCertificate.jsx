@@ -10,6 +10,7 @@ export default function IssueCertificate() {
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState('');
   const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState({});
   const [formData, setFormData] = useState({
     student_id: '',
     degree_title: '',
@@ -19,11 +20,10 @@ export default function IssueCertificate() {
     cgpa: '',
     issue_date: '',
     completion_date: '',
-    is_public: true,
   });
 
   const updateField = (field) => (event) => {
-    const value = field === 'is_public' ? event.target.value === 'true' : event.target.value;
+    const value = event.target.value;
     setFormData((current) => ({ ...current, [field]: value }));
   };
 
@@ -31,6 +31,7 @@ export default function IssueCertificate() {
     event.preventDefault();
     setSuccess('');
     setError('');
+    setFieldErrors({});
     setSubmitting(true);
 
     try {
@@ -49,10 +50,16 @@ export default function IssueCertificate() {
         cgpa: '',
         issue_date: '',
         completion_date: '',
-        is_public: true,
       });
     } catch (requestError) {
-      setError(requestError.response?.data?.error || 'Unable to issue certificate');
+      const responseData = requestError.response?.data;
+
+      if (requestError.response?.status === 422 && responseData?.errors) {
+        setFieldErrors(responseData.errors);
+        setError(responseData.error || 'Please fix the highlighted fields and try again.');
+      } else {
+        setError(responseData?.error || 'Unable to issue certificate');
+      }
     } finally {
       setSubmitting(false);
     }
@@ -63,7 +70,7 @@ export default function IssueCertificate() {
       <div className="grid gap-6 lg:grid-cols-[1.3fr_0.7fr]">
         <Card className="space-y-6">
           <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.3em] text-primary-600">Issue Certificate</p>
+            <p className="text-sm font-semibold uppercase tracking-[0.15em] text-primary-600">Issue Certificate</p>
             <h1 className="mt-2 text-3xl font-bold text-gray-900 dark:text-white">Generate a new certificate</h1>
           </div>
 
@@ -72,7 +79,17 @@ export default function IssueCertificate() {
 
           <form className="space-y-4" onSubmit={handleSubmit}>
             <div>
-              <Input label="Student ID" name="student_id" value={formData.student_id} onChange={updateField('student_id')} required />
+              <Input
+                label="Student ID"
+                name="student_id"
+                value={formData.student_id}
+                onChange={updateField('student_id')}
+                error={fieldErrors.student_id?.[0]}
+                required
+              />
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                Enter the student's university ID, for example 0112330154.
+              </p>
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
@@ -88,24 +105,27 @@ export default function IssueCertificate() {
               <Input type="date" label="Issue Date" name="issue_date" value={formData.issue_date} onChange={updateField('issue_date')} required />
               <Input type="date" label="Completion Date" name="completion_date" value={formData.completion_date} onChange={updateField('completion_date')} />
             </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Visibility</label>
-              <select className="input-field" value={formData.is_public} onChange={updateField('is_public')}>
-                <option value="true">Public</option>
-                <option value="false">Private</option>
-              </select>
-            </div>
             <Button type="submit" disabled={submitting}>{submitting ? 'Issuing...' : 'Issue Certificate'}</Button>
           </form>
         </Card>
 
         <Card className="space-y-4">
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Guidance</h2>
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Quick Guide</h2>
           <div className="space-y-3 text-sm text-gray-600 dark:text-gray-300">
-            <p>Use the enrolled student list to create a serial-numbered certificate.</p>
-            <p>Public certificates are instantly verifiable; private ones require access control.</p>
-            <Badge variant="info">Serials are generated server-side</Badge>
+            <div className="flex gap-3">
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary-100 text-xs font-bold text-primary-700 dark:bg-primary-900/30 dark:text-primary-300">1</span>
+              <p>Enter the student's registered ID to link the certificate.</p>
+            </div>
+            <div className="flex gap-3">
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary-100 text-xs font-bold text-primary-700 dark:bg-primary-900/30 dark:text-primary-300">2</span>
+              <p>Fill in the degree details and dates.</p>
+            </div>
+            <div className="flex gap-3">
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary-100 text-xs font-bold text-primary-700 dark:bg-primary-900/30 dark:text-primary-300">3</span>
+              <p>A unique serial number is generated automatically.</p>
+            </div>
           </div>
+          <p className="text-xs text-gray-400 dark:text-gray-500">Certificates default to public. Students can change visibility from their dashboard.</p>
         </Card>
       </div>
     </DashboardLayout>

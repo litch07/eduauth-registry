@@ -20,7 +20,17 @@ export default function EmailVerificationModal({ open, onClose, email, onVerifie
       onVerified?.();
       onClose?.();
     } catch (err) {
-      setError(err.response?.data?.error || 'Verification failed');
+      const errorMsg = err.response?.data?.error;
+      
+      if (errorMsg?.includes('expired')) {
+        setError('Code has expired. Please request a new code.');
+      } else if (errorMsg?.includes('attempts')) {
+        setError('Too many failed attempts. Please request a new code.');
+      } else if (errorMsg?.includes('incorrect') || errorMsg?.includes('invalid')) {
+        setError('Incorrect verification code. Please try again.');
+      } else {
+        setError(errorMsg || 'Verification failed. Please try again.');
+      }
     } finally {
       setLoading(false);
     }
@@ -28,11 +38,14 @@ export default function EmailVerificationModal({ open, onClose, email, onVerifie
 
   const handleResend = async () => {
     setError('');
+    setResent(false);
     try {
       await authService.resendVerificationCode(email);
       setResent(true);
+      setCode('');
     } catch (err) {
-      setError(err.response?.data?.error || 'Unable to resend code');
+      const errorMsg = err.response?.data?.error;
+      setError(errorMsg || 'Unable to resend code. Please try again.');
     }
   };
 
@@ -40,27 +53,33 @@ export default function EmailVerificationModal({ open, onClose, email, onVerifie
     <Modal open={open} onClose={onClose} title="Verify Your Email">
       <form onSubmit={handleVerify} className="space-y-4">
         <p className="text-sm text-gray-600 dark:text-gray-300">
-          Enter the 6-digit verification code sent to <span className="font-semibold">{email}</span>.
+          A verification code has been sent to <span className="font-semibold">{email}</span>.
+        </p>
+        
+        <p className="text-xs text-gray-500 dark:text-gray-400">
+          Check your email (including spam folder) for a 6-digit code. It will expire in 10 minutes.
         </p>
 
         {error ? (
           <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-900/20 dark:text-red-300">
-            {error}
+            <p className="font-semibold">✗ {error}</p>
           </div>
         ) : null}
 
         {resent ? (
           <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700 dark:border-green-900 dark:bg-green-900/20 dark:text-green-300">
-            Verification code resent successfully.
+            ✓ Verification code resent successfully. Check your email.
           </div>
         ) : null}
+
+
 
         <Input
           label="Verification Code"
           name="code"
           value={code}
-          onChange={(event) => setCode(event.target.value)}
-          placeholder="123456"
+          onChange={(event) => setCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
+          placeholder="000000"
           inputMode="numeric"
           maxLength={6}
           required
@@ -70,7 +89,7 @@ export default function EmailVerificationModal({ open, onClose, email, onVerifie
           <Button type="button" variant="secondary" onClick={handleResend} disabled={loading}>
             Resend Code
           </Button>
-          <Button type="submit" disabled={loading}>
+          <Button type="submit" disabled={loading || !code}>
             {loading ? 'Verifying...' : 'Verify Email'}
           </Button>
         </div>

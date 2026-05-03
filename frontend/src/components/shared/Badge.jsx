@@ -2,6 +2,7 @@ import { cn } from '../../utils/helpers';
 
 const variants = {
   default: 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-100',
+  primary: 'bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300',
   success: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300',
   warning: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300',
   danger: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300',

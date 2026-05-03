@@ -7,6 +7,7 @@ import Landing from './pages/public/Landing';
 import Login from './pages/auth/Login';
 import Register from './pages/auth/Register';
 import EmailVerification from './pages/auth/EmailVerification';
+import EmailVerified from './pages/auth/EmailVerified';
 import StudentDashboard from './pages/student/Dashboard';
 import StudentCertificates from './pages/student/Certificates';
 import UniversityDashboard from './pages/university/Dashboard';
@@ -27,6 +28,7 @@ export default function App() {
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
             <Route path="/email-verification" element={<EmailVerification />} />
+            <Route path="/email-verified" element={<EmailVerified />} />
             <Route path="/verify" element={<VerifyCertificate />} />
 
             <Route element={<ProtectedRoute allowedRoles={['student']} />}>

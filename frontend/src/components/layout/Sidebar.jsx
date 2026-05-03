@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { BookOpen, LayoutDashboard, ShieldAlert, SquarePen, Users, XCircle, ScanSearch } from 'lucide-react';
+import { BookOpen, LayoutDashboard, SquarePen, Users, XCircle, ScanSearch } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { cn } from '../../utils/helpers';
 
@@ -54,12 +54,6 @@ export default function Sidebar({ open, onClose }) {
             </NavLink>
           ))}
         </nav>
-
-        <div className="mt-8 rounded-2xl bg-gradient-to-br from-primary-600 to-primary-800 p-4 text-white shadow-lg shadow-primary-900/20">
-          <ShieldAlert className="mb-3 h-6 w-6" />
-          <p className="text-sm font-semibold">Secure access</p>
-          <p className="mt-1 text-sm text-primary-100">Role-based tools for approvals, issuance, and verification.</p>
-        </div>
       </aside>
     </>
   );

@@ -1,4 +1,4 @@
-export default function Input({ label, className = '', id, ...props }) {
+export default function Input({ label, className = '', id, error, ...props }) {
   const inputId = id || props.name;
 
   return (
@@ -10,9 +10,10 @@ export default function Input({ label, className = '', id, ...props }) {
       ) : null}
       <input
         id={inputId}
-        className="input-field"
+        className={`input-field ${error ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : ''}`}
         {...props}
       />
+      {error ? <p className="mt-1 text-xs text-red-600 dark:text-red-400">{error}</p> : null}
     </div>
   );
 }
