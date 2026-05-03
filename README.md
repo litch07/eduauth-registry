@@ -1,133 +1,213 @@
 # EduAuth Registry
 
-EduAuth Registry is a university certificate issuance and verification system. It is designed to support secure student records, controlled certificate sharing, role-based access, admin approval, and public certificate verification.
-
-## Overview
-
-This repository contains a full-stack application with a Laravel backend, a React frontend, and a MySQL database. The system is built to let universities issue certificates, students manage and view their records, verifiers confirm authenticity, and administrators review and approve accounts.
+A university certificate issuance and verification system. Universities issue digital certificates, students manage visibility, verifiers check authenticity, and admins review account registrations — all through a single platform.
 
 ## Features
 
-- Role-based access for students, universities, verifiers, and administrators
-- Email verification and admin approval for new accounts
-- Certificate issuance, listing, and tracking
-- Public certificate verification using serial number and date of birth
-- Secure access control for private certificate views
-- Administrative approval and review workflow
-- MySQL-backed data storage with audit-friendly records
+- **Authentication with email verification** — Registration requires a 6-digit SMTP verification code before account creation
+- **Admin approval workflow** — New accounts require admin review before access is granted
+- **Role-based access** — Four distinct roles: Student, University, Verifier, Admin
+- **Certificate issuance** — Universities issue certificates with auto-generated serial numbers
+- **Student-controlled visibility** — Students toggle their certificates between public and private
+- **Public verification** — Anyone can verify a public certificate using its serial number and the student's date of birth
+- **Activity logging** — All significant actions are logged for auditing
 
 ## Tech Stack
 
-- Backend: Laravel 11, PHP 8.2, Laravel Sanctum, Spatie Permission
-- Frontend: React 18, Vite, React Router
-- Styling: Tailwind CSS
-- Database: MySQL 8
-- Tooling: Composer, npm
+| Layer | Technology |
+|-------|-----------|
+| Backend | Laravel 11, PHP 8.2, Laravel Sanctum |
+| Frontend | React 18, Vite, React Router, Tailwind CSS |
+| Database | MySQL 8 |
+| Email | SMTP (configurable — Gmail, Mailtrap, etc.) |
+| Tooling | Composer, npm |
 
-## Repository Structure
+## Project Structure
 
-- `backend/` - Laravel application and server-side logic
-- `frontend/` - React application and user interface
-- `database/` - SQL schema and database setup files
+```
+eduauth-registry/
+├── backend/          # Laravel API
+│   ├── app/
+│   │   ├── Http/Controllers/   # Auth, Admin, Student, University, Verifier
+│   │   ├── Http/Middleware/     # CheckRole middleware
+│   │   ├── Mail/               # Verification, approval, rejection emails
+│   │   └── Models/             # User, Student, Institution, Certificate, etc.
+│   ├── routes/api.php          # All API route definitions
+│   └── .env.example            # Environment variable template
+├── frontend/         # React SPA
+│   ├── src/
+│   │   ├── components/         # Shared UI components (Button, Card, Input, etc.)
+│   │   ├── pages/              # Page components grouped by role
+│   │   ├── contexts/           # Auth and Theme providers
+│   │   └── services/           # API client (Axios)
+│   └── .env.example            # Frontend env template
+└── database/         # SQL schema and seed data
+    └── eduauth_registry.sql
+```
 
 ## Prerequisites
 
-Before you begin, make sure these tools are installed:
+- **PHP 8.2+** — `php -v`
+- **Composer** — `composer --version`
+- **Node.js 18+** — `node -v`
+- **npm** — `npm -v`
+- **MySQL 8** (or XAMPP with MySQL) — `mysql --version`
 
-- PHP 8.2 or later — verify: `php -v` — download: https://www.php.net/downloads.php
-- Composer — verify: `composer --version` — download: https://getcomposer.org/download/
-- Node.js 18 or later — verify: `node -v` — download: https://nodejs.org/
-- npm — verify: `npm -v` — download: https://www.npmjs.com/get-npm
-- MySQL 8 or XAMPP with MySQL — verify: `mysql --version` — download: https://dev.mysql.com/downloads/mysql/
+## Installation
 
-## Clone The Repository
+### 1. Clone the repository
 
-```powershell
+```bash
 git clone https://github.com/litch07/eduauth-registry.git
 cd eduauth-registry
 ```
 
-## Database Setup
+### 2. Database setup
 
-1. Start MySQL or XAMPP.
+1. Start MySQL (or XAMPP).
 2. Create a database named `eduauth_registry`.
-3. Import `database/eduauth_registry.sql` into that database.
-4. If needed, adjust your local database credentials in the backend environment file.
+3. Import the seed data:
 
-If you are using XAMPP, the default local MySQL settings usually work unless your machine is configured differently.
+```sql
+-- Via MySQL CLI
+mysql -u root -p eduauth_registry < database/eduauth_registry.sql
 
-The SQL file already includes the starter data for local use, so there is no separate seed command required.
-
-## Backend Setup
-
-The backend is a Laravel application and requires PHP, Composer, and a `.env` file. Commands vary slightly by OS — follow the block that matches your environment.
-
-Windows (PowerShell):
-
-```powershell
-cd backend
-composer install
-Copy-Item .env.example .env
-php artisan key:generate
-php artisan migrate
-php artisan serve --host=127.0.0.1 --port=8000
+-- Or import via phpMyAdmin / MySQL Workbench
 ```
 
-macOS / Linux:
+### 3. Backend setup
 
 ```bash
 cd backend
 composer install
+```
+
+Copy the environment file and generate a key:
+
+**Windows (PowerShell):**
+```powershell
+Copy-Item .env.example .env
+php artisan key:generate
+```
+
+**macOS / Linux:**
+```bash
 cp .env.example .env
 php artisan key:generate
-php artisan migrate
+```
+
+Then configure your `.env` — see the [Environment Variables](#environment-variables) section below.
+
+Start the backend:
+```bash
 php artisan serve --host=127.0.0.1 --port=8000
 ```
 
-Quick notes and recommendations:
+### 4. Frontend setup
 
-- Do NOT commit the `vendor/` directory to this repository. Committing vendor folders will bloat the repo and make it harder for others to contribute.
-- After copying `.env.example` to `.env`, update the DB values to match your local MySQL, or import `database/eduauth_registry.sql` if you want the seeded demo data.
-- Confirm `APP_URL` and `SANCTUM_STATEFUL_DOMAINS` in `.env` for authentication and CORS when running frontend locally.
-
-## Frontend Setup
-
-```powershell
+```bash
 cd frontend
 npm install
+```
+
+**Windows (PowerShell):**
+```powershell
 Copy-Item .env.example .env
+```
+
+**macOS / Linux:**
+```bash
+cp .env.example .env
+```
+
+The default `VITE_API_URL` points to `http://localhost:8000/api` — no changes needed for local development.
+
+Start the frontend:
+```bash
 npm run dev
 ```
 
-After creating the frontend `.env` file, make sure `VITE_API_URL` points to your backend API:
+### 5. Open the app
+
+Visit `http://localhost:5173` in your browser.
+
+## Environment Variables
+
+### Backend (`backend/.env`)
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `APP_URL` | Backend base URL | `http://localhost:8000` |
+| `APP_ENV` | Environment mode | `local` |
+| `APP_DEBUG` | Show debug info | `true` |
+| `DB_CONNECTION` | Database driver | `mysql` |
+| `DB_HOST` | Database host | `127.0.0.1` |
+| `DB_PORT` | Database port | `3306` |
+| `DB_DATABASE` | Database name | `eduauth_registry` |
+| `DB_USERNAME` | Database user | `root` |
+| `DB_PASSWORD` | Database password | _(empty for XAMPP)_ |
+| `MAIL_MAILER` | Mail transport | `smtp` |
+| `MAIL_HOST` | SMTP server | `smtp.gmail.com` |
+| `MAIL_PORT` | SMTP port | `587` |
+| `MAIL_USERNAME` | SMTP email/user | `your-email@gmail.com` |
+| `MAIL_PASSWORD` | SMTP password/app password | `your-app-password` |
+| `MAIL_ENCRYPTION` | Encryption type | `tls` |
+| `MAIL_FROM_ADDRESS` | Sender email | `noreply@eduauth.com` |
+| `MAIL_FROM_NAME` | Sender display name | `EduAuth Registry` |
+| `FRONTEND_URL` | Frontend URL (for CORS) | `http://localhost:5173` |
+| `SANCTUM_STATEFUL_DOMAINS` | Allowed SPA domains | `localhost:5173` |
+
+#### SMTP setup for Gmail
+
+1. Enable **2-Step Verification** on your Google account.
+2. Generate an **App Password** at https://myaccount.google.com/apppasswords.
+3. Set these values in `backend/.env`:
 
 ```env
-VITE_API_URL=http://localhost:8000/api
+MAIL_MAILER=smtp
+MAIL_HOST=smtp.gmail.com
+MAIL_PORT=587
+MAIL_USERNAME=your-email@gmail.com
+MAIL_PASSWORD=your-16-char-app-password
+MAIL_ENCRYPTION=tls
+MAIL_FROM_ADDRESS=your-email@gmail.com
+MAIL_FROM_NAME="EduAuth Registry"
 ```
 
-The frontend uses `VITE_API_URL` to connect to the backend.
+> **Note:** If `MAIL_MAILER` is set to `log` (the default in `.env.example`), verification codes are written to `storage/logs/laravel.log` instead of being emailed. This is useful for local development without SMTP.
 
-To create a production build:
+### Frontend (`frontend/.env`)
 
-```powershell
-npm run build
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `VITE_API_URL` | Backend API base URL | `http://localhost:8000/api` |
+
+## Usage Flow
+
+### Registration → Verification → Approval → Login
+
+```
+1. Register        →  Fill out role-specific form (student/university/verifier)
+2. Email verify    →  Enter the 6-digit code sent to your email (expires in 10 min)
+3. Await approval  →  Admin reviews and approves your account
+4. Login           →  Sign in with your email and password
 ```
 
-## Run The System
+### By role
 
-1. Start MySQL and confirm the database import is complete.
-2. Start the backend in the `backend/` folder.
-3. Start the frontend in the `frontend/` folder.
-4. Open the frontend in your browser and sign in or register a new account.
+**Student**
+- View issued certificates on the dashboard
+- Toggle certificates between public and private
+- Private certificates cannot be verified by anyone
 
-## Using The Platform
+**University**
+- Issue certificates to enrolled students by student ID
+- Serial numbers are generated automatically
+- Certificates default to public (students control visibility)
 
-This section describes how to use the system and includes test credentials for a quick demo.
-
-### Default Test Credentials
-
-The SQL import (`database/eduauth_registry.sql`) includes seeded accounts for testing. Use the emails below with the password `password` (local seed default). If a seeded password does not work, see the Troubleshooting section for how to reset a user's password.
-
+**Verifier**
+- Verify certificates using serial number + student's date of birth
+- View verification history and stats on the dashboard
 - Admin: `eduauthregistry@gmail.com` — password: `admin123`
 - University: `admin@uiu.ac.bd` — password: `password123`
 - Students:
@@ -139,65 +219,57 @@ The SQL import (`database/eduauth_registry.sql`) includes seeded accounts for te
 	- `demo@brainstation-23.com` — password: `password123`
 	- `ssadidahmed07@gmail.com` — password: `password123`
 
-If a password doesn't work, reset it using the tinker command in the Troubleshooting section.
+**Admin**
+- Review and approve/reject pending user registrations
+- View system-wide stats (users, certificates, activity)
 
-### Quick Walkthrough (by role)
+## Test Credentials
 
-- Student
-	1. Sign in or register as a Student. After registration, verify your email via the code sent to your inbox.
-	2. Wait for admin approval if the account is pending.
-	3. Visit `My Certificates` to view issued certificates.
-	4. Use `View PDF` to inspect the certificate or `Download` to save the PDF.
+The SQL import includes seeded accounts. All passwords below were set during seeding.
 
-- University
-	1. Sign in with a university account.
-	2. Use `Issue Certificate` to assign a certificate to an enrolled student; the system will generate a serial and a PDF automatically.
-	3. Use revoke/restore actions when required; provide a reason to keep an audit trail.
+| Role | Email | Password |
+|------|-------|----------|
+| Admin | `eduauthregistry@gmail.com` | `admin123` |
+| University | `admin@uiu.ac.bd` | `password123` |
+| Student | `ssadidahmed01@gmail.com` | `password123` |
+| Student | `sayem23cse@gmail.com` | `password123` |
+| Student | `mnur223442@bscse.uiu.ac.bd` | `password123` |
+| Verifier | `demo@enosis.com` | `password123` |
+| Verifier | `demo@brainstation-23.com` | `password123` |
+| Verifier | `ssadidahmed07@gmail.com` | `password123` |
 
-- Verifier
-	1. Use the public `/verify` page for instant checks of public certificates (serial + DOB).
-	2. As a logged-in verifier, you can keep a history of verifications and request access to private certificates.
+If a password doesn't work, reset it via tinker:
 
-- Admin
-	1. Review `Pending User Registrations` on the admin dashboard.
-	2. Approve or reject accounts with a reason; approvals trigger email notifications.
-	3. Manage certificates and review activity logs for auditing.
+```bash
+php artisan tinker
+\App\Models\User::where('email', 'your@email.com')->first()->update(['password' => bcrypt('newpassword')]);
+```
 
 ## Troubleshooting
 
-Common issues when running the Laravel backend and React frontend with Sanctum and how to resolve them:
+**CORS / blocked requests**
+- Check that `SANCTUM_STATEFUL_DOMAINS` in `backend/.env` matches your frontend host:port (e.g., `localhost:5173`).
 
-- CORS and blocked requests
-	- Ensure `backend/config/cors.php` includes `sanctum/csrf-cookie` in `paths` and allows the frontend origin.
-	- In `backend/.env` set `SANCTUM_STATEFUL_DOMAINS=localhost:5173` (or the host:port your frontend runs on).
+**Authentication issues**
+- Axios must use `withCredentials: true` (already configured in `frontend/src/services/api.js`).
+- Confirm `APP_URL` is set to `http://localhost:8000` in `backend/.env`.
 
-- Sanctum authentication problems
-	- The SPA flow requires an initial request to `GET /sanctum/csrf-cookie` before login when using cookie-based auth.
-	- Axios must be configured with `withCredentials: true` (see `frontend/src/services/api.js`).
-	- Confirm `SESSION_DOMAIN` and `SANCTUM_STATEFUL_DOMAINS` are correct for your environment.
+**Email not sending**
+- If using `MAIL_MAILER=log`, codes appear in `backend/storage/logs/laravel.log`.
+- For SMTP, verify your credentials and that your email provider allows app passwords.
 
-- APP_URL and redirect mismatches
-	- Set `APP_URL` in `backend/.env` to the URL where your backend runs (e.g. `http://localhost:8000`).
+**Database issues**
+- Import `database/eduauth_registry.sql` for seed data.
+- Or run `php artisan migrate` for empty tables (no seed data).
 
-- Database / migrations / seed data
-	- This project includes `database/eduauth_registry.sql` with starter data. Import that SQL file if you want the seeded demo accounts.
-	- If you prefer, configure `.env` and run `php artisan migrate` to create tables from migrations.
-
-- Common commands
-	- Clear caches: `php artisan config:clear && php artisan cache:clear && php artisan route:clear`
-	- Regenerate key: `php artisan key:generate`
-	- Reset a user password via tinker:
-
-```powershell
-php artisan tinker
-\App\Models\User::where('email', 'eduauthregistry@gmail.com')->first()->update(['password' => bcrypt('newpassword')]);
+**Clear caches**
+```bash
+php artisan config:clear && php artisan cache:clear && php artisan route:clear
 ```
-
-If you still run into issues, check `storage/logs/laravel.log` for errors and the browser DevTools network tab for failed requests.
 
 ## API Documentation
 
-See [API Documentation](API_DOCUMENTATION.md) for a concise list of API endpoints, grouped by role and purpose.
+See [API_DOCUMENTATION.md](API_DOCUMENTATION.md) for the full endpoint reference.
 
 ## Team PhaseShift
 
