@@ -208,6 +208,16 @@ MAIL_FROM_NAME="EduAuth Registry"
 **Verifier**
 - Verify certificates using serial number + student's date of birth
 - View verification history and stats on the dashboard
+- Admin: `eduauthregistry@gmail.com` — password: `admin123`
+- University: `admin@uiu.ac.bd` — password: `password123`
+- Students:
+	- `ssadidahmed01@gmail.com` — password: `password123`
+	- `sayem23cse@gmail.com` — password: `password123`
+	- `mnur223442@bscse.uiu.ac.bd` — password: `password123`
+- Verifiers:
+	- `demo@enosis.com` — password: `password123`
+	- `demo@brainstation-23.com` — password: `password123`
+	- `ssadidahmed07@gmail.com` — password: `password123`
 
 **Admin**
 - Review and approve/reject pending user registrations

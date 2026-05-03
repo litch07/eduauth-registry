@@ -3,138 +3,167 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Mail\SendApprovalRequest;
+use App\Mail\SendVerificationCode;
 use App\Models\ActivityLog;
-use App\Models\Certificate;
-use App\Models\EmailVerificationCode;
 use App\Models\Institution;
+use App\Models\PendingRegistration;
 use App\Models\Student;
 use App\Models\User;
 use App\Models\Verifier;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Validator;
 
 class AuthController extends Controller
 {
     public function register(Request $request)
     {
-        $validator = Validator::make($request->all(), [
-            'email' => 'required|email|unique:users,email',
-            'password' => 'required|string|min:8|confirmed',
-            'role' => 'required|in:student,university,verifier',
-            'first_name' => 'required_if:role,student|string|max:100',
-            'middle_name' => 'nullable|string|max:100',
-            'last_name' => 'required_if:role,student|string|max:100',
-            'nid' => 'required_if:role,student|string|max:50',
-            'date_of_birth' => 'required_if:role,student|date|before:today',
-            'phone' => 'required_if:role,student|required_if:role,university|required_if:role,verifier|string|max:30',
-            'address' => 'required_if:role,student|required_if:role,university|string|max:1000',
-            'student_id' => 'required_if:role,student|string|max:50|unique:students,student_id',
-            'name' => 'required_if:role,university|string|max:255',
-            'registration_number' => 'required_if:role,university|string|max:100|unique:institutions,registration_number',
-            'city' => 'required_if:role,university|string|max:120',
-            'contact_person' => 'required_if:role,verifier|string|max:255',
-            'company_name' => 'required_if:role,verifier|string|max:255',
-            'purpose' => 'required_if:role,verifier|string|max:1000',
-        ]);
+        $validator = Validator::make(
+            $request->all(),
+            [
+                'email' => 'required|email',
+                'password' => 'required|string|min:8|confirmed',
+                'role' => 'required|in:student,university,verifier',
+                'first_name' => 'required_if:role,student|string|max:100',
+                'middle_name' => 'nullable|string|max:100',
+                'last_name' => 'required_if:role,student|string|max:100',
+                'nid' => 'required_if:role,student|string|max:50',
+                'date_of_birth' => 'required_if:role,student|date|before:today',
+                'phone' => 'required_if:role,student|required_if:role,university|required_if:role,verifier|string|max:30',
+                'address' => 'required_if:role,student|required_if:role,university|string|max:1000',
+                'student_id' => 'required_if:role,student|string|max:50|unique:students,student_id',
+                'name' => 'required_if:role,university|string|max:255',
+                'registration_number' => 'required_if:role,university|string|max:100|unique:institutions,registration_number',
+                'city' => 'required_if:role,university|string|max:120',
+                'contact_person' => 'required_if:role,verifier|string|max:255',
+                'company_name' => 'required_if:role,verifier|string|max:255',
+                'purpose' => 'required_if:role,verifier|string|max:1000',
+            ],
+            [
+                'email.email' => 'Enter a valid email address.',
+                'password.min' => 'Password must be at least 8 characters.',
+                'password.confirmed' => 'Password confirmation does not match.',
+                'student_id.unique' => 'This student ID is already registered. Please use a different student ID.',
+                'registration_number.unique' => 'This registration number is already registered. Please use a different registration number.',
+            ]
+        );
 
         if ($validator->fails()) {
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
         $payload = $validator->validated();
+        $payload['email'] = strtolower(trim($payload['email']));
+
+        $verifiedUser = User::where('email', $payload['email'])->whereNotNull('email_verified_at')->first();
+        if ($verifiedUser) {
+            return response()->json([
+                'errors' => [
+                    'email' => ['This email is already verified. Please log in instead.'],
+                ],
+            ], 422);
+        }
+
+        if ($payload['role'] === 'student') {
+            $nidHash = hash('sha256', (string) $payload['nid']);
+
+            if (Student::where('nid_hash', $nidHash)->whereNull('deleted_at')->exists()) {
+                return response()->json([
+                    'errors' => [
+                        'nid' => ['This NID is already registered. Please use a different NID.'],
+                    ],
+                ], 422);
+            }
+
+            $payload['nid_hash'] = $nidHash;
+            unset($payload['nid']);
+        }
+
+        $registrationData = $payload;
+        unset($registrationData['password_confirmation']);
 
         try {
-            $result = DB::transaction(function () use ($request, $payload) {
-                $user = User::create([
-                    'email' => $payload['email'],
-                    'password' => Hash::make($payload['password']),
-                    'role' => $payload['role'],
-                    'is_approved' => false,
-                    'email_verified_at' => null,
-                ]);
-
-                if ($payload['role'] === 'student') {
-                    Student::create([
-                        'user_id' => $user->id,
-                        'first_name' => $payload['first_name'],
-                        'middle_name' => $payload['middle_name'] ?? null,
-                        'last_name' => $payload['last_name'],
-                        'nid_hash' => hash('sha256', (string) $payload['nid']),
-                        'date_of_birth' => $payload['date_of_birth'],
-                        'phone' => $payload['phone'],
-                        'address' => $payload['address'] ?? null,
-                        'student_id' => $payload['student_id'],
-                    ]);
-                } elseif ($payload['role'] === 'university') {
-                    Institution::create([
-                        'user_id' => $user->id,
-                        'name' => $payload['name'],
-                        'registration_number' => $payload['registration_number'],
-                        'address' => $payload['address'],
-                        'city' => $payload['city'],
-                        'phone' => $payload['phone'],
-                    ]);
-                } else {
-                    Verifier::create([
-                        'user_id' => $user->id,
-                        'company_name' => $payload['company_name'],
-                        'contact_person' => $payload['contact_person'],
-                        'designation' => $request->input('designation'),
-                        'email' => $payload['email'],
-                        'phone' => $payload['phone'],
-                        'purpose' => $payload['purpose'],
-                        'address' => $payload['address'] ?? null,
-                    ]);
-                }
-
+            $pendingRegistration = DB::transaction(function () use ($request, $payload, $registrationData) {
                 $verificationCode = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
 
-                EmailVerificationCode::updateOrCreate(
+                PendingRegistration::updateOrCreate(
                     ['email' => $payload['email']],
                     [
-                        'user_id' => $user->id,
+                        'user_name' => $this->resolveDisplayName($payload),
+                        'registration_role' => $payload['role'],
                         'code_hash' => Hash::make($verificationCode),
                         'expires_at' => now()->addMinutes(10),
                         'verified_at' => null,
                         'attempts' => 0,
+                        'registration_data' => $registrationData,
                     ]
                 );
 
                 ActivityLog::create([
-                    'user_id' => $user->id,
+                    'user_id' => null,
                     'action' => 'registered',
-                    'entity_type' => User::class,
-                    'entity_id' => $user->id,
-                    'description' => 'User registered and verification code issued.',
+                    'entity_type' => PendingRegistration::class,
+                    'entity_id' => null,
+                    'description' => 'Registration pending email verification.',
                     'metadata' => [
-                        'role' => $user->role,
-                        'email' => $user->email,
+                        'role' => $payload['role'],
+                        'email' => $payload['email'],
                     ],
                     'ip_address' => $request->ip(),
                 ]);
 
                 return [
-                    'user' => $user,
                     'verification_code' => $verificationCode,
                 ];
             });
 
+            try {
+                Mail::to($payload['email'])->send(
+                    new SendVerificationCode(
+                        $payload['email'],
+                        $pendingRegistration['verification_code'],
+                        $this->resolveDisplayName($payload)
+                    )
+                );
+            } catch (\Exception $mailException) {
+                \Log::error('Failed to send verification email', [
+                    'email' => $payload['email'],
+                    'error' => $mailException->getMessage(),
+                ]);
+
+                return response()->json([
+                    'message' => 'Registration saved. Please check your email (including spam folder) for the verification code.',
+                    'data' => [
+                        'email' => $payload['email'],
+                        'role' => $payload['role'],
+                        'verification_code' => app()->environment('local') ? $pendingRegistration['verification_code'] : null,
+                    ],
+                    'warning' => 'Email delivery may be delayed. Check spam folder.',
+                ], 201);
+            }
+
             return response()->json([
-                'message' => 'Registration successful. Please check your email for the verification code.',
+                'message' => 'Registration saved. Please check your email for the verification code.',
                 'data' => [
-                    'user_id' => $result['user']->id,
-                    'email' => $result['user']->email,
-                    'role' => $result['user']->role,
-                    'verification_code' => app()->environment('local') ? $result['verification_code'] : null,
+                    'email' => $payload['email'],
+                    'role' => $payload['role'],
+                    'verification_code' => app()->environment('local') ? $pendingRegistration['verification_code'] : null,
                 ],
             ], 201);
         } catch (\Throwable $throwable) {
             report($throwable);
+            \Log::error('Registration error', [
+                'message' => $throwable->getMessage(),
+                'file' => $throwable->getFile(),
+                'line' => $throwable->getLine(),
+            ]);
 
             return response()->json([
-                'error' => 'Registration failed. Please try again.',
+                'error' => 'Registration failed. Please try again later.',
+                'details' => app()->environment('local') ? $throwable->getMessage() : null,
             ], 500);
         }
     }
@@ -240,7 +269,7 @@ class AuthController extends Controller
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
-        $verification = EmailVerificationCode::where('email', $request->email)->valid()->first();
+        $verification = PendingRegistration::where('email', $request->email)->valid()->first();
 
         if (!$verification || !Hash::check($request->code, $verification->code_hash)) {
             if ($verification) {
@@ -250,19 +279,64 @@ class AuthController extends Controller
             return response()->json(['error' => 'Invalid or expired verification code.'], 422);
         }
 
-        DB::transaction(function () use ($verification) {
-            $verification->forceFill([
-                'verified_at' => now(),
-            ])->save();
+        $registrationData = $verification->registration_data ?? [];
 
-            User::where('email', $verification->email)->update([
+        if (empty($registrationData['role']) || empty($registrationData['email'])) {
+            return response()->json(['error' => 'Registration data is missing. Please register again.'], 422);
+        }
+
+        if (empty($registrationData['password'])) {
+            return response()->json(['error' => 'Registration password is missing. Please register again.'], 422);
+        }
+
+        $user = DB::transaction(function () use ($verification, $registrationData, $request) {
+            $user = User::create([
+                'email' => $registrationData['email'],
+                'password' => $registrationData['password'],
+                'role' => $registrationData['role'],
+                'is_approved' => false,
                 'email_verified_at' => now(),
             ]);
-        });
 
-        $user = User::where('email', $verification->email)->first();
+            if ($registrationData['role'] === 'student') {
+                Student::create([
+                    'user_id' => $user->id,
+                    'first_name' => $registrationData['first_name'],
+                    'middle_name' => $registrationData['middle_name'] ?? null,
+                    'last_name' => $registrationData['last_name'],
+                    'nid_hash' => $registrationData['nid_hash'],
+                    'date_of_birth' => $registrationData['date_of_birth'],
+                    'phone' => $registrationData['phone'],
+                    'address' => $registrationData['address'] ?? null,
+                    'student_id' => $registrationData['student_id'],
+                ]);
+            } elseif ($registrationData['role'] === 'university') {
+                Institution::create([
+                    'user_id' => $user->id,
+                    'name' => $registrationData['name'],
+                    'registration_number' => $registrationData['registration_number'],
+                    'address' => $registrationData['address'],
+                    'city' => $registrationData['city'],
+                    'phone' => $registrationData['phone'],
+                ]);
+            } else {
+                Verifier::create([
+                    'user_id' => $user->id,
+                    'company_name' => $registrationData['company_name'],
+                    'contact_person' => $registrationData['contact_person'],
+                    'designation' => $registrationData['designation'] ?? null,
+                    'email' => $registrationData['email'],
+                    'phone' => $registrationData['phone'],
+                    'purpose' => $registrationData['purpose'],
+                    'address' => $registrationData['address'] ?? null,
+                ]);
+            }
 
-        if ($user) {
+            $verification->forceFill([
+                'verified_at' => now(),
+                'attempts' => 0,
+            ])->save();
+
             ActivityLog::create([
                 'user_id' => $user->id,
                 'action' => 'email_verified',
@@ -274,7 +348,11 @@ class AuthController extends Controller
                 ],
                 'ip_address' => $request->ip(),
             ]);
-        }
+
+            return $user;
+        });
+
+        $this->notifyAdminsAboutVerifiedRegistration($user);
 
         return response()->json([
             'message' => 'Email verified successfully.',
@@ -285,37 +363,39 @@ class AuthController extends Controller
     public function resendVerificationCode(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'email' => 'required|email|exists:users,email',
+            'email' => 'required|email',
         ]);
 
         if ($validator->fails()) {
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
-        $user = User::where('email', $request->email)->firstOrFail();
+        $user = PendingRegistration::where('email', $request->email)->valid()->first();
 
-        if ($user->email_verified_at) {
-            return response()->json(['error' => 'Email already verified.'], 422);
+        if (!$user) {
+            return response()->json(['error' => 'No pending registration found for this email.'], 404);
         }
 
         $verificationCode = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
 
-        EmailVerificationCode::updateOrCreate(
+        PendingRegistration::updateOrCreate(
             ['email' => $user->email],
             [
-                'user_id' => $user->id,
+                'user_name' => $user->user_name,
+                'registration_role' => $user->registration_role,
                 'code_hash' => Hash::make($verificationCode),
                 'expires_at' => now()->addMinutes(10),
                 'verified_at' => null,
                 'attempts' => 0,
+                'registration_data' => $user->registration_data,
             ]
         );
 
         ActivityLog::create([
-            'user_id' => $user->id,
+            'user_id' => null,
             'action' => 'verification_code_resent',
-            'entity_type' => User::class,
-            'entity_id' => $user->id,
+            'entity_type' => PendingRegistration::class,
+            'entity_id' => null,
             'description' => 'Verification code was reissued.',
             'metadata' => [
                 'email' => $user->email,
@@ -327,6 +407,40 @@ class AuthController extends Controller
             'message' => 'Verification code resent successfully.',
             'verification_code' => app()->environment('local') ? $verificationCode : null,
         ]);
+    }
+
+    private function resolveDisplayName(array $payload): string
+    {
+        return match ($payload['role']) {
+            'student' => trim(($payload['first_name'] ?? '') . ' ' . ($payload['last_name'] ?? '')) ?: 'Student',
+            'university' => $payload['name'] ?? 'University',
+            'verifier' => $payload['contact_person'] ?? 'Verifier',
+            default => 'User',
+        };
+    }
+
+    private function notifyAdminsAboutVerifiedRegistration(User $user): void
+    {
+        $adminEmails = User::where('role', 'admin')->pluck('email')->filter()->values()->all();
+
+        if (empty($adminEmails)) {
+            \Log::warning('No admin email addresses were found for approval notification.', [
+                'user_id' => $user->id,
+                'email' => $user->email,
+            ]);
+
+            return;
+        }
+
+        try {
+            Mail::to($adminEmails)->send(new SendApprovalRequest($user->fresh(['student', 'institution', 'verifier'])));
+        } catch (\Throwable $throwable) {
+            \Log::error('Failed to send admin approval notification', [
+                'user_id' => $user->id,
+                'email' => $user->email,
+                'error' => $throwable->getMessage(),
+            ]);
+        }
     }
 
     private function formatUser(User $user): array
