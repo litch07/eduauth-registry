@@ -141,7 +141,7 @@ class VerifyController extends Controller
         $this->logVerification($request, $certificate, 'success', true, 'Certificate verified successfully');
 
         // Log activity if authenticated
-        if ($isAuthenticated) {
+        if ($request->user()) {
             ActivityLog::create([
                 'user_id' => $request->user()->id,
                 'action' => 'certificate_verified',
