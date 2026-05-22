@@ -19,6 +19,7 @@ class Verifier extends Model
         'phone',
         'purpose',
         'address',
+        'website',
     ];
 
     public function user()

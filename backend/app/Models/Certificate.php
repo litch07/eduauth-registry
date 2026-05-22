@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\EncryptionService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -13,33 +14,59 @@ class Certificate extends Model
     protected $fillable = [
         'student_id',
         'institution_id',
-        'issued_by',
-        'revoked_by',
-        'restored_by',
+        'enrollment_id',
         'serial',
-        'degree_title',
-        'program_name',
+        'certificate_level',
+        'certificate_name',
+        'department',
         'major',
-        'registration_no',
+        'session',
         'cgpa',
+        'degree_class',
         'issue_date',
-        'completion_date',
+        'convocation_date',
+        'authority_name',
+        'authority_title',
+        'is_publicly_shareable',
         'pdf_path',
-        'is_public',
+        'issued_by',
         'revoked_at',
+        'revoked_by',
         'revocation_reason',
-        'restored_at',
-        'restoration_reason',
     ];
 
     protected $casts = [
         'cgpa' => 'decimal:2',
         'issue_date' => 'date',
-        'completion_date' => 'date',
+        'convocation_date' => 'date',
         'revoked_at' => 'datetime',
-        'restored_at' => 'datetime',
-        'is_public' => 'boolean',
+        'is_publicly_shareable' => 'boolean',
     ];
+
+    public function isRevoked(): bool
+    {
+        return $this->revoked_at !== null;
+    }
+
+    /**
+     * Generate an encrypted share link for this certificate.
+     *
+     * The link includes the serial and an encrypted DOB token,
+     * allowing one-click verification without exposing the student's DOB.
+     */
+    public function getShareLinkAttribute(): ?string
+    {
+        $student = $this->student;
+
+        if (!$student || !$student->date_of_birth) {
+            return null;
+        }
+
+        $encryptedDob = EncryptionService::encryptDOB($student->date_of_birth->format('Y-m-d'));
+        $frontendUrl = config('app.frontend_url', 'http://localhost:5173');
+
+        return "{$frontendUrl}/verify?s={$this->serial}&v={$encryptedDob}";
+    }
 
     public function student()
     {
@@ -49,6 +76,11 @@ class Certificate extends Model
     public function institution()
     {
         return $this->belongsTo(Institution::class);
+    }
+
+    public function enrollment()
+    {
+        return $this->belongsTo(Enrollment::class);
     }
 
     public function issuedBy()
@@ -61,18 +93,14 @@ class Certificate extends Model
         return $this->belongsTo(User::class, 'revoked_by');
     }
 
-    public function restoredBy()
-    {
-        return $this->belongsTo(User::class, 'restored_by');
-    }
-
     public function verificationLogs()
     {
         return $this->hasMany(VerificationLog::class);
     }
 
-    public function scopeActive($query)
+    public function scopeNotRevoked($query)
     {
         return $query->whereNull('revoked_at');
     }
 }
+

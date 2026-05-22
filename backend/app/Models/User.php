@@ -68,4 +68,34 @@ class User extends Authenticatable
     {
         return $this->hasMany(ActivityLog::class);
     }
+
+    public function profileChangeRequests()
+    {
+        return $this->hasMany(ProfileChangeRequest::class);
+    }
+
+    public function getNameAttribute(): string
+    {
+        if ($this->role === 'admin') {
+            return 'System Administrator';
+        }
+
+        if ($this->role === 'student' && $this->student) {
+            return trim(implode(' ', array_filter([
+                $this->student->first_name,
+                $this->student->middle_name,
+                $this->student->last_name,
+            ])));
+        }
+
+        if ($this->role === 'university' && $this->institution) {
+            return $this->institution->name;
+        }
+
+        if ($this->role === 'verifier' && $this->verifier) {
+            return $this->verifier->company_name;
+        }
+
+        return $this->email;
+    }
 }
