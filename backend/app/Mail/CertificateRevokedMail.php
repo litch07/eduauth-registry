@@ -4,27 +4,27 @@ namespace App\Mail;
 
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
-
+use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
+use App\Models\Certificate;
+use App\Models\User;
 
-class SendVerificationCode extends Mailable implements ShouldQueue
+class CertificateRevokedMail extends Mailable implements ShouldQueue
 {
     use Queueable, SerializesModels;
 
-    public $email;
-    public $verificationCode;
-    public $userName;
+    public $certificate;
+    public $user;
 
     /**
      * Create a new message instance.
      */
-    public function __construct($email, $verificationCode, $userName = 'User')
+    public function __construct(Certificate $certificate, User $user)
     {
-        $this->email = $email;
-        $this->verificationCode = $verificationCode;
-        $this->userName = $userName;
+        $this->certificate = $certificate;
+        $this->user = $user;
     }
 
     /**
@@ -33,7 +33,7 @@ class SendVerificationCode extends Mailable implements ShouldQueue
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: 'Email Verification - EduAuth Registry',
+            subject: 'Important: Your Certificate Has Been Revoked',
         );
     }
 
@@ -43,12 +43,7 @@ class SendVerificationCode extends Mailable implements ShouldQueue
     public function content(): Content
     {
         return new Content(
-            view: 'emails.verification-code',
-            with: [
-                'email' => $this->email,
-                'verificationCode' => $this->verificationCode,
-                'userName' => $this->userName,
-            ],
+            view: 'emails.certificate-revoked',
         );
     }
 
