@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import authService from '../services/authService';
 
 const AuthContext = createContext(null);
@@ -15,24 +15,40 @@ export const AuthProvider = ({ children }) => {
     setLoading(false);
   }, []);
 
-  const login = async (credentials) => {
+  const login = useCallback(async (credentials) => {
     const data = await authService.login(credentials);
     setUser(data.user);
     return data;
-  };
+  }, []);
 
-  const logout = async () => {
+  const refreshUser = useCallback(async () => {
+    const data = await authService.getCurrentUser();
+    if (data?.user) {
+      setUser(data.user);
+      localStorage.setItem('user', JSON.stringify(data.user));
+    }
+    return data;
+  }, []);
+
+  const updateLocalUser = useCallback((nextUser) => {
+    setUser(nextUser);
+    localStorage.setItem('user', JSON.stringify(nextUser));
+  }, []);
+
+  const logout = useCallback(async () => {
     try {
       await authService.logout();
     } finally {
       setUser(null);
     }
-  };
+  }, []);
 
   const value = {
     user,
     login,
     logout,
+    refreshUser,
+    updateLocalUser,
     loading,
     isAuthenticated: !!user,
     isStudent: user?.role === 'student',
