@@ -36,6 +36,33 @@ class Student extends Model
         return $this->hasMany(Certificate::class);
     }
 
+    public function enrollments()
+    {
+        return $this->hasMany(Enrollment::class);
+    }
+
+    public function activeEnrollments()
+    {
+        return $this->hasMany(Enrollment::class)->where('status', 'active');
+    }
+
+    public function accessRequests()
+    {
+        return $this->hasMany(CertificateAccessRequest::class);
+    }
+
+    public function verifierAccesses()
+    {
+        return $this->hasMany(VerifierAccess::class);
+    }
+
+    public function institutions()
+    {
+        return $this->belongsToMany(Institution::class, 'enrollments')
+            ->withPivot('enrollment_number', 'program', 'batch', 'status')
+            ->withTimestamps();
+    }
+
     public function getFullNameAttribute()
     {
         return trim(collect([$this->first_name, $this->middle_name, $this->last_name])->filter()->implode(' '));

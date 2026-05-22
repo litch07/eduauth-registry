@@ -17,6 +17,7 @@ class Institution extends Model
         'address',
         'city',
         'phone',
+        'website',
     ];
 
     public function user()
@@ -27,5 +28,22 @@ class Institution extends Model
     public function certificates()
     {
         return $this->hasMany(Certificate::class);
+    }
+
+    public function enrollments()
+    {
+        return $this->hasMany(Enrollment::class);
+    }
+
+    public function enrolledStudents()
+    {
+        return $this->belongsToMany(Student::class, 'enrollments')
+            ->withPivot('enrollment_number', 'program', 'batch', 'status')
+            ->withTimestamps();
+    }
+
+    public function activeEnrollments()
+    {
+        return $this->hasMany(Enrollment::class)->where('status', 'active');
     }
 }
