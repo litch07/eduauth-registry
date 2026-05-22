@@ -3,5 +3,5 @@
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
-    return response()->json(['message' => 'EduAuth Registry backend']);
+    return response()->json(['message' => 'EduAuth Registry API']);
 });
