@@ -21,3 +21,41 @@
     @apply rounded-2xl bg-white p-6 shadow-lg shadow-slate-900/5 ring-1 ring-gray-900/5 dark:bg-gray-800 dark:ring-white/5;
   }
 }
+
+/* React Select Dark Mode Support */
+.dark .react-select-container .react-select__control {
+  background-color: #1f2937;
+  border-color: #374151;
+  color: #fff;
+}
+
+.dark .react-select-container .react-select__menu {
+  background-color: #1f2937;
+  border-color: #374151;
+}
+
+.dark .react-select-container .react-select__option {
+  background-color: #1f2937;
+  color: #fff;
+}
+
+.dark .react-select-container .react-select__option--is-focused {
+  background-color: #374151;
+}
+
+.dark .react-select-container .react-select__option--is-selected {
+  background-color: #2563eb;
+}
+
+.dark .react-select-container .react-select__single-value {
+  color: #fff;
+}
+
+.dark .react-select-container .react-select__input-container {
+  color: #fff;
+}
+
+.dark .react-select-container .react-select__placeholder {
+  color: #9ca3af;
+}
+
