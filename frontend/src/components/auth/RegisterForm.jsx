@@ -1,45 +1,88 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import { useForm } from 'react-hook-form';
+import { yupResolver } from '@hookform/resolvers/yup';
+import * as yup from 'yup';
 import Button from '../shared/Button';
 import Input from '../shared/Input';
 import authService from '../../services/authService';
 import EmailVerificationModal from './EmailVerificationModal';
 
-const baseForm = {
-  email: '',
-  password: '',
-  password_confirmation: '',
-  role: 'student',
-  first_name: '',
-  middle_name: '',
-  last_name: '',
-  nid: '',
-  date_of_birth: '',
-  phone: '',
-  address: '',
-  student_id: '',
-  name: '',
-  registration_number: '',
-  city: '',
-  company_name: '',
-  contact_person: '',
-  purpose: '',
-  designation: '',
+const baseSchema = {
+  email: yup.string().email('Please enter a valid email address').required('Email is required'),
+  password: yup.string().min(8, 'Password must be at least 8 characters').required('Password is required'),
+  password_confirmation: yup.string()
+    .oneOf([yup.ref('password'), null], 'Passwords must match')
+    .required('Please confirm your password'),
+  role: yup.string().oneOf(['student', 'university', 'verifier']).required(),
 };
 
+const studentSchema = yup.object().shape({
+  ...baseSchema,
+  first_name: yup.string().required('First name is required'),
+  middle_name: yup.string().nullable(),
+  last_name: yup.string().required('Last name is required'),
+  nid: yup.string().required('NID is required'),
+  date_of_birth: yup.string().required('Date of birth is required'),
+  phone: yup.string().required('Phone is required'),
+  address: yup.string().required('Address is required'),
+});
+
+const universitySchema = yup.object().shape({
+  ...baseSchema,
+  name: yup.string().required('Institution name is required'),
+  registration_number: yup.string().required('Registration number is required'),
+  city: yup.string().required('City is required'),
+  phone: yup.string().required('Phone is required'),
+  address: yup.string().required('Address is required'),
+});
+
+const verifierSchema = yup.object().shape({
+  ...baseSchema,
+  company_name: yup.string().required('Company name is required'),
+  contact_person: yup.string().required('Contact person is required'),
+  designation: yup.string().nullable(),
+  purpose: yup.string().required('Purpose is required'),
+  phone: yup.string().required('Phone is required'),
+  address: yup.string().nullable(),
+});
+
 export default function RegisterForm() {
-  const [formData, setFormData] = useState(baseForm);
-  const [error, setError] = useState('');
-  const [fieldErrors, setFieldErrors] = useState({});
-  const [loading, setLoading] = useState(false);
+  const [serverError, setServerError] = useState('');
   const [verificationEmail, setVerificationEmail] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const navigate = useNavigate();
 
-  const role = formData.role;
+  const [currentRole, setCurrentRole] = useState('student');
+
+  const {
+    register,
+    handleSubmit,
+    watch,
+    formState: { errors, isSubmitting },
+    reset,
+    setError,
+  } = useForm({
+    resolver: yupResolver(
+      currentRole === 'student' ? studentSchema :
+      currentRole === 'university' ? universitySchema :
+      verifierSchema
+    ),
+    defaultValues: {
+      role: 'student',
+    },
+  });
+
+  const selectedRole = watch('role');
+
+  useEffect(() => {
+    if (selectedRole && selectedRole !== currentRole) {
+      setCurrentRole(selectedRole);
+    }
+  }, [selectedRole, currentRole]);
 
   const roleDescription = useMemo(() => {
-    switch (role) {
+    switch (selectedRole) {
       case 'student':
         return 'Register to manage and verify your certificates.';
       case 'university':
@@ -49,62 +92,33 @@ export default function RegisterForm() {
       default:
         return '';
     }
-  }, [role]);
+  }, [selectedRole]);
 
-  const updateField = (field) => (event) => {
-    setFormData((current) => ({ ...current, [field]: event.target.value }));
-  };
-
-  const handleSubmit = async (event) => {
-    event.preventDefault();
-    setError('');
-    setFieldErrors({});
-    setLoading(true);
+  const onSubmit = async (data) => {
+    setServerError('');
 
     try {
-      const payload = {
-        email: formData.email,
-        password: formData.password,
-        password_confirmation: formData.password_confirmation,
-        role: formData.role,
-        phone: formData.phone,
-        address: formData.address,
-      };
-
-      if (formData.role === 'student') {
-        payload.first_name = formData.first_name;
-        payload.middle_name = formData.middle_name;
-        payload.last_name = formData.last_name;
-        payload.nid = formData.nid;
-        payload.date_of_birth = formData.date_of_birth;
-        payload.student_id = formData.student_id;
-      } else if (formData.role === 'university') {
-        payload.name = formData.name;
-        payload.registration_number = formData.registration_number;
-        payload.city = formData.city;
-      } else if (formData.role === 'verifier') {
-        payload.company_name = formData.company_name;
-        payload.contact_person = formData.contact_person;
-        payload.designation = formData.designation;
-        payload.purpose = formData.purpose;
-      }
-
+      const payload = { ...data };
       await authService.register(payload);
-
-      setVerificationEmail(formData.email);
+      
+      setVerificationEmail(data.email);
       setModalOpen(true);
     } catch (err) {
+      if (!err.response) {
+        setServerError('Network error. Please ensure the backend server is running.');
+        return;
+      }
+      
       const responseData = err.response?.data;
 
       if (err.response?.status === 422 && responseData?.errors) {
-        setFieldErrors(responseData.errors);
-        const firstMessage = Object.values(responseData.errors).flat().find(Boolean);
-        setError(firstMessage || 'Please fix the highlighted fields and try again.');
+        Object.entries(responseData.errors).forEach(([field, messages]) => {
+          setError(field, { type: 'server', message: messages[0] });
+        });
+        setServerError('Please fix the highlighted fields and try again.');
       } else {
-        setError(responseData?.error || responseData?.message || 'Registration failed');
+        setServerError(responseData?.error || responseData?.message || 'Registration failed');
       }
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -113,22 +127,24 @@ export default function RegisterForm() {
       <>
         <FormSection title="Personal Details">
           <div className="grid gap-4 sm:grid-cols-2">
-            <Input label="First Name" name="first_name" value={formData.first_name} onChange={updateField('first_name')} error={fieldErrors.first_name?.[0]} required />
-            <Input label="Middle Name" name="middle_name" value={formData.middle_name} onChange={updateField('middle_name')} error={fieldErrors.middle_name?.[0]} />
+            <Input label="First Name" {...register('first_name')} error={errors.first_name?.message} />
+            <Input label="Middle Name" {...register('middle_name')} error={errors.middle_name?.message} />
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
-            <Input label="Last Name" name="last_name" value={formData.last_name} onChange={updateField('last_name')} error={fieldErrors.last_name?.[0]} required />
-            <Input label="Student ID" name="student_id" value={formData.student_id} onChange={updateField('student_id')} error={fieldErrors.student_id?.[0]} required />
+            <Input label="Last Name" {...register('last_name')} error={errors.last_name?.message} />
+            <div className="flex items-center text-sm text-gray-500 dark:text-gray-400 mt-6">
+              Your Student ID will be assigned by your university upon enrollment.
+            </div>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
-            <Input label="NID" name="nid" value={formData.nid} onChange={updateField('nid')} error={fieldErrors.nid?.[0]} required />
-            <Input type="date" label="Date of Birth" name="date_of_birth" value={formData.date_of_birth} onChange={updateField('date_of_birth')} error={fieldErrors.date_of_birth?.[0]} required />
+            <Input label="NID" {...register('nid')} error={errors.nid?.message} />
+            <Input type="date" label="Date of Birth" {...register('date_of_birth')} error={errors.date_of_birth?.message} />
           </div>
         </FormSection>
         <FormSection title="Contact">
           <div className="grid gap-4 sm:grid-cols-2">
-            <Input label="Phone" name="phone" value={formData.phone} onChange={updateField('phone')} error={fieldErrors.phone?.[0]} required />
-            <Input label="Address" name="address" value={formData.address} onChange={updateField('address')} error={fieldErrors.address?.[0]} required />
+            <Input label="Phone" {...register('phone')} error={errors.phone?.message} />
+            <Input label="Address" {...register('address')} error={errors.address?.message} />
           </div>
         </FormSection>
       </>
@@ -136,16 +152,16 @@ export default function RegisterForm() {
     university: (
       <>
         <FormSection title="Institution Details">
-          <Input label="University Name" name="name" value={formData.name} onChange={updateField('name')} error={fieldErrors.name?.[0]} required />
+          <Input label="University Name" {...register('name')} error={errors.name?.message} />
           <div className="grid gap-4 sm:grid-cols-2">
-            <Input label="Registration Number" name="registration_number" value={formData.registration_number} onChange={updateField('registration_number')} error={fieldErrors.registration_number?.[0]} required />
-            <Input label="City" name="city" value={formData.city} onChange={updateField('city')} error={fieldErrors.city?.[0]} required />
+            <Input label="Registration Number" {...register('registration_number')} error={errors.registration_number?.message} />
+            <Input label="City" {...register('city')} error={errors.city?.message} />
           </div>
         </FormSection>
         <FormSection title="Contact">
           <div className="grid gap-4 sm:grid-cols-2">
-            <Input label="Phone" name="phone" value={formData.phone} onChange={updateField('phone')} error={fieldErrors.phone?.[0]} required />
-            <Input label="Address" name="address" value={formData.address} onChange={updateField('address')} error={fieldErrors.address?.[0]} required />
+            <Input label="Phone" {...register('phone')} error={errors.phone?.message} />
+            <Input label="Address" {...register('address')} error={errors.address?.message} />
           </div>
         </FormSection>
       </>
@@ -154,17 +170,17 @@ export default function RegisterForm() {
       <>
         <FormSection title="Organization Details">
           <div className="grid gap-4 sm:grid-cols-2">
-            <Input label="Company Name" name="company_name" value={formData.company_name} onChange={updateField('company_name')} error={fieldErrors.company_name?.[0]} required />
-            <Input label="Contact Person" name="contact_person" value={formData.contact_person} onChange={updateField('contact_person')} error={fieldErrors.contact_person?.[0]} required />
+            <Input label="Company Name" {...register('company_name')} error={errors.company_name?.message} />
+            <Input label="Contact Person" {...register('contact_person')} error={errors.contact_person?.message} />
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
-            <Input label="Designation" name="designation" value={formData.designation} onChange={updateField('designation')} error={fieldErrors.designation?.[0]} />
-            <Input label="Phone" name="phone" value={formData.phone} onChange={updateField('phone')} error={fieldErrors.phone?.[0]} required />
+            <Input label="Designation" {...register('designation')} error={errors.designation?.message} />
+            <Input label="Phone" {...register('phone')} error={errors.phone?.message} />
           </div>
         </FormSection>
         <FormSection title="Purpose">
-          <Input label="Purpose of Verification" name="purpose" value={formData.purpose} onChange={updateField('purpose')} error={fieldErrors.purpose?.[0]} required />
-          <Input label="Address" name="address" value={formData.address} onChange={updateField('address')} error={fieldErrors.address?.[0]} />
+          <Input label="Purpose of Verification" {...register('purpose')} error={errors.purpose?.message} />
+          <Input label="Address" {...register('address')} error={errors.address?.message} />
         </FormSection>
       </>
     ),
@@ -179,36 +195,36 @@ export default function RegisterForm() {
           <p className="text-sm text-gray-600 dark:text-gray-400">{roleDescription}</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {error ? (
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+          {serverError && (
             <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-900/20 dark:text-red-300">
-              {error}
+              {serverError}
             </div>
-          ) : null}
+          )}
 
           <FormSection title="Account">
             <div className="grid gap-4 sm:grid-cols-2">
-              <Input type="email" label="Email Address" name="email" value={formData.email} onChange={updateField('email')} error={fieldErrors.email?.[0]} required />
+              <Input type="email" label="Email Address" {...register('email')} error={errors.email?.message} />
               <div>
                 <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Role</label>
-                <select className="input-field" value={formData.role} onChange={updateField('role')}>
+                <select className="input-field" {...register('role')}>
                   <option value="student">Student</option>
                   <option value="university">University</option>
                   <option value="verifier">Verifier</option>
                 </select>
-                {fieldErrors.role?.[0] ? <p className="mt-1 text-xs text-red-600 dark:text-red-400">{fieldErrors.role[0]}</p> : null}
+                {errors.role && <p className="mt-1 text-xs text-red-600 dark:text-red-400">{errors.role.message}</p>}
               </div>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
-              <Input type="password" label="Password" name="password" value={formData.password} onChange={updateField('password')} error={fieldErrors.password?.[0]} required />
-              <Input type="password" label="Confirm Password" name="password_confirmation" value={formData.password_confirmation} onChange={updateField('password_confirmation')} error={fieldErrors.password_confirmation?.[0]} required />
+              <Input type="password" label="Password" {...register('password')} error={errors.password?.message} />
+              <Input type="password" label="Confirm Password" {...register('password_confirmation')} error={errors.password_confirmation?.message} />
             </div>
           </FormSection>
 
-          {fieldsByRole[role]}
+          {fieldsByRole[selectedRole]}
 
-          <Button type="submit" disabled={loading} className="w-full">
-            {loading ? 'Creating account...' : 'Register'}
+          <Button type="submit" loading={isSubmitting} className="w-full">
+            Register
           </Button>
         </form>
 

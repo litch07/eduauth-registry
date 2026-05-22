@@ -1,31 +1,50 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import { useForm } from 'react-hook-form';
+import { yupResolver } from '@hookform/resolvers/yup';
+import * as yup from 'yup';
+import toast from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
 import Button from '../shared/Button';
 import Input from '../shared/Input';
 
+const loginSchema = yup.object().shape({
+  email: yup.string().email('Please enter a valid email address').required('Email is required'),
+  password: yup.string().required('Password is required'),
+});
+
 export default function LoginForm() {
-  const [formData, setFormData] = useState({ email: '', password: '' });
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [serverError, setServerError] = useState('');
   const { login } = useAuth();
   const navigate = useNavigate();
 
-  const handleSubmit = async (event) => {
-    event.preventDefault();
-    setError('');
-    setLoading(true);
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm({
+    resolver: yupResolver(loginSchema),
+  });
+
+  const onSubmit = async (data) => {
+    setServerError('');
 
     try {
-      const data = await login(formData);
-      if (data.user.role === 'student') navigate('/student/dashboard');
-      else if (data.user.role === 'university') navigate('/university/dashboard');
-      else if (data.user.role === 'verifier') navigate('/verifier/dashboard');
-      else if (data.user.role === 'admin') navigate('/admin/dashboard');
+      const response = await login(data);
+      toast.success('Logged in successfully');
+      if (response.user.role === 'student') navigate('/student/dashboard');
+      else if (response.user.role === 'university') navigate('/university/dashboard');
+      else if (response.user.role === 'verifier') navigate('/verifier/dashboard');
+      else if (response.user.role === 'admin') navigate('/admin/dashboard');
     } catch (err) {
-      setError(err.response?.data?.message || err.response?.data?.error || 'Login failed');
-    } finally {
-      setLoading(false);
+      let errorMsg = 'Login failed';
+      if (!err.response) {
+        errorMsg = 'Network error. Please ensure the backend server is running.';
+      } else {
+        errorMsg = err.response.data?.message || err.response.data?.error || 'Login failed';
+      }
+      setServerError(errorMsg);
+      toast.error(errorMsg);
     }
   };
 
@@ -36,35 +55,31 @@ export default function LoginForm() {
         <h2 className="text-3xl font-bold text-gray-900 dark:text-white">Sign in</h2>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-5">
-        {error ? (
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+        {serverError ? (
           <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-900/20 dark:text-red-300">
-            {error}
+            {serverError}
           </div>
         ) : null}
 
         <Input
           type="email"
           label="Email Address"
-          name="email"
-          value={formData.email}
-          onChange={(event) => setFormData({ ...formData, email: event.target.value })}
           placeholder="you@example.com"
-          required
+          {...register('email')}
+          error={errors.email?.message}
         />
 
         <Input
           type="password"
           label="Password"
-          name="password"
-          value={formData.password}
-          onChange={(event) => setFormData({ ...formData, password: event.target.value })}
           placeholder="••••••••"
-          required
+          {...register('password')}
+          error={errors.password?.message}
         />
 
-        <Button type="submit" disabled={loading} className="w-full">
-          {loading ? 'Signing in...' : 'Sign in'}
+        <Button type="submit" loading={isSubmitting} className="w-full">
+          Sign in
         </Button>
       </form>
 
