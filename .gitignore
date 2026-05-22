@@ -1,31 +1,60 @@
-# OS and editor files
+# OS generated files
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
 Desktop.ini
-*.swp
-*.swo
+
+# IDEs and Editors
 .idea/
 .vscode/
+*.swp
+*.swo
+*.sublime-project
+*.sublime-workspace
 .fleet/
 .zed/
+.antigravityignore
 
-# Local environment files
-.env
-.env.*
-!.env.example
-
-# Frontend dependencies and build output
-/frontend/node_modules/
-/frontend/build/
-/frontend/dist/
-/frontend/.vite/
-
-# Backend dependencies and build output
-/backend/vendor/
-/backend/node_modules/
-
-# Logs and caches
+# Logs
+logs
 *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+pnpm-debug.log*
+
+# Root level environment files
+.env
+.env.*
+!.env.example
+
+# Frontend specific (React/Vite)
+/frontend/node_modules/
+/frontend/build/
+/frontend/dist/
+/frontend/dist-ssr/
+/frontend/.vite/
+/frontend/coverage/
+
+# Backend specific (Laravel)
+/backend/vendor/
+/backend/node_modules/
+/backend/public/storage
+/backend/storage/*.key
+/backend/storage/debugbar/
+/backend/storage/framework/cache/data/*
+/backend/storage/framework/sessions/*
+/backend/storage/framework/testing/*
+/backend/storage/framework/views/*
+/backend/storage/logs/*
+!/backend/storage/framework/cache/data/.gitignore
+!/backend/storage/framework/sessions/.gitignore
+!/backend/storage/framework/testing/.gitignore
+!/backend/storage/framework/views/.gitignore
+!/backend/storage/logs/.gitignore
+/backend/bootstrap/cache/*
+!/backend/bootstrap/cache/.gitignore
