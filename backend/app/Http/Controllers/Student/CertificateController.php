@@ -27,7 +27,6 @@ class CertificateController extends Controller
 
             $certificates = Certificate::with('institution')
                 ->where('student_id', $student->id)
-                ->whereNull('deleted_at')
                 ->orderBy('issue_date', 'desc')
                 ->get()
                 ->map(function ($cert) {
@@ -42,9 +41,11 @@ class CertificateController extends Controller
                         'issue_date' => $cert->issue_date,
                         'completion_date' => $cert->completion_date,
                         'institution_name' => $cert->institution?->name,
-                        'is_public' => $cert->is_public,
+                        'is_public' => $cert->is_publicly_shareable,
                         'revoked_at' => $cert->revoked_at,
+                        'revocation_reason' => $cert->revocation_reason,
                         'created_at' => $cert->created_at,
+                        'share_link' => $cert->share_link,
                     ];
                 });
 
@@ -82,7 +83,6 @@ class CertificateController extends Controller
             $certificate = Certificate::with('institution')
                 ->where('id', $id)
                 ->where('student_id', $student->id)
-                ->whereNull('deleted_at')
                 ->first();
 
             if (!$certificate) {
@@ -105,8 +105,9 @@ class CertificateController extends Controller
                     'issue_date' => $certificate->issue_date,
                     'completion_date' => $certificate->completion_date,
                     'institution_name' => $certificate->institution?->name,
-                    'is_public' => $certificate->is_public,
+                    'is_public' => $certificate->is_publicly_shareable,
                     'revoked_at' => $certificate->revoked_at,
+                    'share_link' => $certificate->share_link,
                 ]
             ], 200);
 
@@ -137,7 +138,6 @@ class CertificateController extends Controller
 
             $certificate = Certificate::where('id', $id)
                 ->where('student_id', $student->id)
-                ->whereNull('deleted_at')
                 ->first();
 
             if (!$certificate) {
@@ -147,13 +147,13 @@ class CertificateController extends Controller
                 ], 404);
             }
 
-            $certificate->is_public = !$certificate->is_public;
+            $certificate->is_publicly_shareable = !$certificate->is_publicly_shareable;
             $certificate->save();
 
             return response()->json([
                 'success' => true,
-                'message' => $certificate->is_public ? 'Certificate is now public' : 'Certificate is now private',
-                'is_public' => $certificate->is_public,
+                'message' => $certificate->is_publicly_shareable ? 'Certificate is now public' : 'Certificate is now private',
+                'is_public' => $certificate->is_publicly_shareable,
             ]);
 
         } catch (\Exception $e) {
