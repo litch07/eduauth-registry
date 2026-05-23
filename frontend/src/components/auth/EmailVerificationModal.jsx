@@ -89,8 +89,8 @@ export default function EmailVerificationModal({ open, onClose, email, onVerifie
           <Button type="button" variant="secondary" onClick={handleResend} disabled={loading}>
             Resend Code
           </Button>
-          <Button type="submit" disabled={loading || !code}>
-            {loading ? 'Verifying...' : 'Verify Email'}
+          <Button type="submit" loading={loading} disabled={!code}>
+            Verify Email
           </Button>
         </div>
       </form>

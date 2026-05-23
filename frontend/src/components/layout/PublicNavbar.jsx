@@ -1,9 +1,11 @@
 import { Link, useLocation } from 'react-router-dom';
 import { ShieldCheck, MoonStar, SunMedium } from 'lucide-react';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { cn } from '../../utils/helpers';
 
 export default function PublicNavbar() {
+  const { user } = useAuth();
   const { isDark, toggleTheme } = useTheme();
   const location = useLocation();
 
@@ -12,7 +14,7 @@ export default function PublicNavbar() {
   return (
     <header className="sticky top-0 z-40 border-b border-gray-200/70 bg-white/80 backdrop-blur-lg dark:border-gray-800 dark:bg-gray-900/80">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6 lg:px-8">
-        <Link to="/" className="flex items-center gap-2.5 group">
+        <Link to={user ? `/${user.role}/dashboard` : "/"} className="flex items-center gap-2.5 group">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary-600 text-white shadow-md shadow-primary-600/25 transition group-hover:shadow-lg group-hover:shadow-primary-600/30">
             <ShieldCheck className="h-4.5 w-4.5" />
           </div>

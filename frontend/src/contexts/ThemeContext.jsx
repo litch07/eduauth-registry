@@ -1,22 +1,50 @@
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 
 const ThemeContext = createContext(null);
 
 export const ThemeProvider = ({ children }) => {
-  const [isDark, setIsDark] = useState(() => {
-    const stored = localStorage.getItem('theme');
-    return stored === 'dark';
+  const [theme, setThemeState] = useState(() => {
+    return localStorage.getItem('theme') || 'system';
   });
 
-  useEffect(() => {
-    document.documentElement.classList.toggle('dark', isDark);
-    localStorage.setItem('theme', isDark ? 'dark' : 'light');
-  }, [isDark]);
+  const applyTheme = useCallback((themeValue) => {
+    if (themeValue === 'system') {
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      document.documentElement.classList.toggle('dark', prefersDark);
+    } else {
+      document.documentElement.classList.toggle('dark', themeValue === 'dark');
+    }
+  }, []);
 
-  const toggleTheme = () => setIsDark((current) => !current);
+  useEffect(() => {
+    applyTheme(theme);
+    localStorage.setItem('theme', theme);
+  }, [theme, applyTheme]);
+
+  // Listen for system theme changes when in 'system' mode
+  useEffect(() => {
+    if (theme !== 'system') return;
+
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const handler = (e) => {
+      document.documentElement.classList.toggle('dark', e.matches);
+    };
+    mediaQuery.addEventListener('change', handler);
+    return () => mediaQuery.removeEventListener('change', handler);
+  }, [theme]);
+
+  const setTheme = useCallback((value) => {
+    setThemeState(value);
+  }, []);
+
+  const toggleTheme = useCallback(() => {
+    setThemeState((current) => (current === 'dark' ? 'light' : 'dark'));
+  }, []);
+
+  const isDark = theme === 'dark' || (theme === 'system' && typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches);
 
   return (
-    <ThemeContext.Provider value={{ isDark, toggleTheme }}>
+    <ThemeContext.Provider value={{ isDark, theme, setTheme, toggleTheme }}>
       {children}
     </ThemeContext.Provider>
   );
