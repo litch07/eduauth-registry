@@ -1,190 +1,250 @@
-# EduAuth Registry
+# 🎓 EduAuth Registry
 
-A secure, role-based academic credential management platform connecting Students, Universities, Verifiers, and Administrators.
+![PHP](https://img.shields.io/badge/PHP-8.2%2B-777BB4?style=flat-square&logo=php&logoColor=white)
+![Laravel](https://img.shields.io/badge/Laravel-11.x-FF2D20?style=flat-square&logo=laravel&logoColor=white)
+![React](https://img.shields.io/badge/React-18.x-61DAFB?style=flat-square&logo=react&logoColor=black)
+![MySQL](https://img.shields.io/badge/MySQL-8.0-4479A1?style=flat-square&logo=mysql&logoColor=white)
+
+**EduAuth Registry** is a comprehensive web application designed for Bangladeshi universities to issue, manage, and verify academic certificates digitally. It provides a secure platform where institutions can grant credentials, students can control access to their academic records, and third-party organizations can reliably verify them.
 
 ---
 
 ## ✨ Features
 
-**Student** — View & download certificates (PDF + QR), toggle visibility, manage verifier access requests, submit profile change requests, request enrollment withdrawal.
+- **🛡️ Secure Verification:** Verifiers can validate certificates using unique serial numbers and the student's date of birth.
+- **🎓 University Management:** Universities can enroll students, issue digital certificates with CGPAs, and process enrollment/withdrawal applications.
+- **🔒 Student Privacy:** Students have full control over their profile visibility (public, private, or verifier-only).
+- **🤝 Access Control:** Students review pending access requests and can grant temporary access to verifiers.
+- **📑 Audit Trails:** The system automatically logs all verification attempts and critical actions for auditing purposes.
+- **⚙️ Administrative Control:** Admins review and approve new account registrations, revoke certificates if errors are found, and monitor system activity.
 
-**University** — Enroll students, manage enrollment statuses, issue individual or batch certificates via CSV, revoke certificates.
+## 👥 Roles & Permissions
 
-**Verifier** — Search students by exact identifier (email / student ID / NID), send access requests, verify certificates (attempts are logged), export verification history.
+| Role | Capabilities |
+| :--- | :--- |
+| **Admin** | Approves user registrations, revokes certificates, and monitors overall system activity. |
+| **University** | Enrolls students, issues academic certificates, and processes withdrawal or enrollment applications. |
+| **Student** | Manages certificate visibility, approves verifier access requests, and downloads digital certificates. |
+| **Verifier** | Requests access to student records and verifies certificate authenticity for employment or background checks. |
 
-**Admin** — Approve/reject user accounts, review profile change requests, revoke certificates system-wide, view analytics with trend charts, global search across users and certificates.
+## 🛠️ Tech Stack
 
-**Shared** — In-app notifications, per-user settings (certificate visibility, notification preferences), encrypted share links for public certificate verification.
+### Backend
+- **Framework:** Laravel ^11.31 (PHP ^8.2)
+- **Auth:** Laravel Sanctum
+- **Packages:** `dompdf`, `spatie/laravel-permission`
 
----
+### Frontend
+- **Framework:** React ^18.3.1 (Vite)
+- **Styling:** Tailwind CSS
+- **Libraries:** React Router DOM, React Hook Form, Recharts
 
-## 🛠 Tech Stack
-
-| Layer | Technology |
-|-------|------------|
-| Frontend | React 18, Vite, Tailwind CSS, Axios |
-| Backend | Laravel 11, PHP 8.2+, Laravel Sanctum |
-| Database | MySQL 8.0+ |
-| PDF | DomPDF (`barryvdh/laravel-dompdf`) |
-| Mail | SMTP (configured in `.env`) |
-
----
-
-## 🔑 Demo Accounts
-
-All demo accounts use the password `password123` except the admin.
-
-| Role | Email | Password |
-|------|-------|----------|
-| **Admin** | `eduauthregistry@gmail.com` | `admin123` |
-| **University** | `admin@uiu.ac.bd` | `password123` |
-| **Student** (active, has certificates) | `ssadidahmed01@gmail.com` | `password123` |
-| **Student** (graduated) | `sayem23cse@gmail.com` | `password123` |
-| **Student** (suspended) | `mnur223442@bscse.uiu.ac.bd` | `password123` |
-| **Verifier** | `demo@enosis.com` | `password123` |
-| **Verifier** | `demo@brainstation-23.com` | `password123` |
+### Database
+- **RDBMS:** MySQL 8.0
 
 ---
 
-## 🚀 Setup Guide
+## 🚀 Getting Started
 
-### 1. Clone the Repository
+### Prerequisites
 
+**For Windows:**
+- **PHP** (8.2 or higher) with extensions: `mbstring`, `openssl`, `pdo`, `pdo_mysql`, `tokenizer`, `xml`, `ctype`, `json`, `bcmath`, `gd`
+- **Composer** (latest)
+- **Node.js** (LTS) & **npm**
+- **MySQL** (8.0)
+- **Git**
+> *Tip: Use [XAMPP](https://www.apachefriends.org/) or [Laragon](https://laragon.org/) as an easy way to get PHP and MySQL together. We recommend using **Git Bash** or **PowerShell** for running setup commands.*
+
+**For Linux / Mac:**
+- **PHP** (8.2 or higher) with the extensions listed above.
+- **Composer** (latest)
+- **Node.js** (LTS) & **npm**
+- **MySQL** (8.0)
+- **Git**
+> *Tip: Use `apt` (Ubuntu/Debian) or `brew` (Mac) for installing PHP and MySQL. Ensure `php-cli` and `php-fpm` are installed.*
+
+---
+
+### Installation & Setup
+
+We have split the installation guides depending on your operating system to ensure a smooth setup experience for any visitor.
+
+<details open>
+<summary><strong>🪟 Windows Setup Guide</strong> (Click to collapse/expand)</summary>
+
+<br>
+
+**1. Clone the repository**
 ```bash
 git clone https://github.com/litch07/eduauth-registry.git
 cd eduauth-registry
 ```
 
-### 2. Prerequisites
+**2. Database Setup**
+Open MySQL (via XAMPP phpMyAdmin, MySQL Workbench, or the MySQL CLI). Create a new database named `eduauth_registry` and import the provided SQL files.
 
-| Requirement | Windows | Linux |
-|------------|---------|-------|
-| PHP 8.2+ | [XAMPP](https://apachefriends.org) or [Laragon](https://laragon.org) | `apt install php8.2` |
-| MySQL 8.0+ | Included with XAMPP/Laragon | `apt install mysql-server` |
-| Composer | [getcomposer.org](https://getcomposer.org/download/) | `curl -sS https://getcomposer.org/installer \| php` |
-| Node.js 18+ | [nodejs.org](https://nodejs.org) | `apt install nodejs` |
+Alternatively, via terminal:
+```bash
+mysql -u root -p
+```
+```sql
+CREATE DATABASE eduauth_registry;
+USE eduauth_registry;
+SOURCE database/schema.sql;
+SOURCE database/seed.sql;
+exit;
+```
+
+**3. Backend Setup**
+```bash
+cd backend
+copy .env.example .env
+```
+Update your `.env` file:
+```env
+APP_URL=http://localhost:8000
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_DATABASE=eduauth_registry
+DB_USERNAME=root
+DB_PASSWORD=
+```
+Install dependencies and start the server:
+```bash
+composer install
+php artisan key:generate
+php artisan serve
+```
+*The backend API will run at `http://localhost:8000`.*
+
+**4. Frontend Setup**
+Open a new terminal window:
+```bash
+cd frontend
+copy .env.example .env
+```
+Update your `.env` file:
+```env
+VITE_API_URL=http://localhost:8000/api
+```
+Install dependencies and start the app:
+```bash
+npm install
+npm run dev
+```
+*The frontend will run at `http://localhost:5173`.*
+
+</details>
+
+<details>
+<summary><strong>🐧🍎 Linux / Mac Setup Guide</strong> (Click to collapse/expand)</summary>
+
+<br>
+
+**1. Clone the repository**
+```bash
+git clone https://github.com/litch07/eduauth-registry.git
+cd eduauth-registry
+```
+
+**2. Database Setup**
+If MySQL is not installed, install it using `sudo apt install mysql-server` (Ubuntu) or `brew install mysql` (Mac). Set up the database via the terminal:
+```bash
+sudo mysql -u root -p
+```
+```sql
+CREATE DATABASE eduauth_registry;
+USE eduauth_registry;
+SOURCE database/schema.sql;
+SOURCE database/seed.sql;
+exit;
+```
+
+**3. Backend Setup**
+```bash
+cd backend
+cp .env.example .env
+```
+Update your `.env` file:
+```env
+APP_URL=http://localhost:8000
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_DATABASE=eduauth_registry
+DB_USERNAME=root
+DB_PASSWORD=
+```
+Install dependencies and start the server:
+```bash
+composer install
+```
+*(If `composer install` fails, verify PHP extensions from the Prerequisites are enabled in `php.ini`)*
+```bash
+php artisan key:generate
+php artisan serve
+```
+*The backend API will run at `http://localhost:8000`.*
+
+**4. Frontend Setup**
+Open a new terminal window:
+```bash
+cd frontend
+cp .env.example .env
+```
+Update your `.env` file:
+```env
+VITE_API_URL=http://localhost:8000/api
+```
+Install dependencies and start the app:
+```bash
+npm install
+npm run dev
+```
+*The frontend will run at `http://localhost:5173`.*
+
+</details>
 
 ---
 
-### 3. Setup (Windows)
+## 🧪 Test Accounts
 
-**1. Database** — Start MySQL via XAMPP/Laragon, open phpMyAdmin, create a database named `eduauth_registry`, then import `database/schema.sql` followed by `database/seed.sql`.
+Use the following credentials to explore the system's different roles after setup:
 
-**2. Backend**
-```powershell
-cd backend
-composer install
-copy .env.example .env
-php artisan key:generate
-```
-Set your DB credentials in `backend/.env`, then:
-```powershell
-php artisan serve
-```
-> API available at `http://127.0.0.1:8000`
-
-**3. Frontend** — Open a second terminal:
-```powershell
-cd frontend
-npm install
-copy .env.example .env
-npm run dev
-```
-> App available at `http://localhost:5173`
-
----
-
-### 4. Setup (Linux — Ubuntu / Debian)
-
-**1. Install dependencies**
-```bash
-sudo apt update && sudo apt upgrade -y
-sudo apt install software-properties-common -y
-sudo add-apt-repository ppa:ondrej/php -y && sudo apt update
-sudo apt install -y php8.2 php8.2-cli php8.2-mysql php8.2-zip \
-  php8.2-gd php8.2-mbstring php8.2-curl php8.2-xml php8.2-bcmath
-sudo apt install mysql-server -y
-curl -sS https://getcomposer.org/installer | php && sudo mv composer.phar /usr/local/bin/composer
-curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
-sudo apt install -y nodejs
-```
-
-**2. Database**
-```bash
-sudo mysql -u root -e "CREATE DATABASE eduauth_registry;"
-mysql -u root eduauth_registry < database/schema.sql
-mysql -u root eduauth_registry < database/seed.sql
-```
-
-**3. Backend**
-```bash
-cd backend
-composer install
-cp .env.example .env
-php artisan key:generate
-# Edit .env with your DB credentials
-php artisan serve
-```
-
-**4. Frontend**
-```bash
-cd frontend
-npm install
-cp .env.example .env
-npm run dev
-```
+| Role | Email Address | Password | Status |
+| :--- | :--- | :--- | :--- |
+| **Admin** | `eduauthregistry@gmail.com` | `admin123` | Active |
+| **University** | `admin@uiu.ac.bd` | `password123` | Active |
+| **Student** | `ssadidahmed01@gmail.com` | `password123` | Active |
+| **Student** | `sayem23cse@gmail.com` | `password123` | Active |
+| **Student** | `mnur223442@bscse.uiu.ac.bd` | `password123` | Active |
+| **Student** | `kanij.fatema@gmail.com` | `password123` | Active |
+| **Student** | `safwan.al.sajid@gmail.com` | `password123` | Active |
+| **Student** | `pending.student@gmail.com` | `password123` | Pending Approval |
+| **Verifier** | `demo@enosis.com` | `password123` | Active |
+| **Verifier** | `demo@brainstation-23.com` | `password123` | Active |
+| **Verifier** | `ssadidahmed07@gmail.com` | `password123` | Active |
 
 ---
 
 ## 📁 Project Structure
 
-```
+```text
 eduauth-registry/
-├── backend/                    # Laravel 11 API
-│   ├── app/
-│   │   ├── Http/Controllers/   # Organized by role (Admin, Student, University, Verifier)
-│   │   ├── Models/
-│   │   ├── Mail/
-│   │   ├── Notifications/
-│   │   └── Services/
-│   └── routes/
-│       └── api.php             # All API routes
-├── frontend/                   # React + Vite SPA
-│   └── src/
-│       ├── pages/              # Organized by role
-│       ├── components/         # Shared UI components
-│       ├── contexts/           # Auth, Theme, Notification contexts
-│       ├── services/           # Axios API client
-│       └── hooks/              # Custom React hooks
-├── database/
-│   ├── schema.sql              # Full DB schema (run first)
-│   └── seed.sql                # Demo data (run second)
-├── API.md                      # API reference
-└── README.md
+├── backend/                  # Laravel backend application
+│   ├── app/Http/Controllers/ # Controllers organized by role (Admin, Student, etc.)
+│   ├── app/Models/           # Eloquent models
+│   ├── app/Services/         # Business logic services
+│   └── resources/views/      # Email and PDF templates
+├── frontend/                 # React frontend application
+│   ├── src/pages/            # Role-based page components
+│   ├── src/components/       # Shared UI components
+│   └── src/contexts/         # Global state (auth, notifications, theme)
+└── database/                 # Database structure and seed data
+    ├── schema.sql
+    └── seed.sql
 ```
 
----
+## 📖 API Reference
 
-## ⚠️ Key Constraints
-
-- **Student search** (for verifiers and universities) uses exact identifiers only — email, student ID, or NID. Name-based search is intentionally disabled for privacy.
-- **Certificate serial format:** `BSC-YY-SEQSEQ` (e.g., `BSC-26-000001`). Prefix reflects certificate level.
-- **Enrollment rule:** One active enrollment per student per institution at a time.
-- **Private certificates** are only visible to verifiers with an approved, non-expired access grant.
-- **Timezone:** Set `APP_TIMEZONE` in `backend/.env` to match your local timezone (e.g., `Asia/Dhaka`) for correct date handling.
-
----
-
-## 👥 Development Team
-
-Developed by **Team PhaseShift**:
-
-- **Sadid Ahmed** — Lead Backend Developer & Architect
-- **Md. Assaduzzaman Nur** — Lead Frontend & UI/UX Developer
-- **M.M. Sayem Prodhan** — Full-Stack Engineer & Database Architect
-
----
-
-## 📄 License
-
-Licensed under the [MIT License](LICENSE).
+Comprehensive API documentation is available in [`API.md`](./API.md).
