@@ -336,7 +336,30 @@ CREATE TABLE user_settings (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   user_id BIGINT UNSIGNED NOT NULL UNIQUE,
   preferences JSON NULL,
+  profile_visibility VARCHAR(50) NOT NULL DEFAULT 'verifiers_only',
+  allow_verifier_search TINYINT(1) NOT NULL DEFAULT 1,
+  show_email_to_verifiers TINYINT(1) NOT NULL DEFAULT 0,
+  show_institution_to_public TINYINT(1) NOT NULL DEFAULT 1,
   created_at TIMESTAMP NULL,
   updated_at TIMESTAMP NULL,
   CONSTRAINT fk_user_settings_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
+
+CREATE TABLE enrollment_applications (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    student_id BIGINT UNSIGNED NOT NULL,
+    institution_id BIGINT UNSIGNED NOT NULL,
+    program VARCHAR(255) NULL,
+    batch VARCHAR(100) NULL,
+    reason TEXT NULL,
+    document_path VARCHAR(255) NULL,
+    status ENUM('pending', 'approved', 'rejected', 'more_info_requested') NOT NULL DEFAULT 'pending',
+    university_response TEXT NULL,
+    reviewed_by BIGINT UNSIGNED NULL,
+    reviewed_at TIMESTAMP NULL,
+    created_at TIMESTAMP NULL,
+    updated_at TIMESTAMP NULL,
+    FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE,
+    FOREIGN KEY (institution_id) REFERENCES institutions(id) ON DELETE CASCADE,
+    FOREIGN KEY (reviewed_by) REFERENCES users(id) ON DELETE SET NULL
+);
