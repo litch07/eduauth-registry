@@ -101,10 +101,13 @@ class SerialGeneratorService
     private static function getPrefix($level)
     {
         $levelLower = strtolower($level);
-        return match(true) {
-            in_array($levelLower, ['bachelor', 'undergraduate']) => 'BSC',
-            in_array($levelLower, ['master', 'postgraduate']) => 'MSC',
-            in_array($levelLower, ['phd', 'doctorate']) => 'PHD',
+        return match($levelLower) {
+            'bachelor of science' => 'BSc',
+            'bachelor of commerce' => 'BCom',
+            'bachelor of arts' => 'BA',
+            'master of business administration' => 'MBA',
+            'master of science' => 'MSc',
+            'doctor of philosophy' => 'PhD',
             default => strtoupper(substr($level, 0, 3)) ?: 'CRT',
         };
     }

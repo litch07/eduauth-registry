@@ -41,6 +41,10 @@ class CertificateService
     /**
      * Generate and store the PDF for a certificate.
      *
+     * Always re-renders the Blade template so the student's current legal
+     * name (fetched live from the Student → User relationship) is used,
+     * rather than serving a stale cached file.
+     *
      * @param string $certificateId
      * @return string The path to the stored PDF.
      */
@@ -51,9 +55,6 @@ class CertificateService
         $institution = $certificate->institution;
 
         $filePath = 'public/certificates/' . $certificate->serial . '.pdf';
-        if (Storage::exists($filePath)) {
-            return $filePath;
-        }
 
         $qrCode = $this->generateQRCode($certificate);
         $verificationUrl = $certificate->share_link ?? $this->getVerificationUrl($certificate->serial);
@@ -83,7 +84,8 @@ class CertificateService
     }
 
     /**
-     * Get the PDF for a certificate, generating it if it doesn't exist.
+     * Get the PDF for a certificate, always regenerating it so the
+     * student's current legal name is rendered.
      *
      * @param string $certificateId
      * @return \Illuminate\Http\Response
@@ -91,11 +93,8 @@ class CertificateService
     public function getCertificatePdf(string $certificateId)
     {
         $certificate = Certificate::findOrFail($certificateId);
-        $filePath = $certificate->pdf_path;
 
-        if (!$filePath || !Storage::exists($filePath)) {
-            $filePath = $this->generatePDF($certificateId);
-        }
+        $filePath = $this->generatePDF($certificateId);
 
         return Storage::download($filePath, $certificate->serial . '.pdf');
     }
