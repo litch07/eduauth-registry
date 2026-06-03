@@ -63,6 +63,12 @@ class Student extends Model
             ->withTimestamps();
     }
 
+    public function enrollmentApplications()
+    {
+        return $this->hasMany(EnrollmentApplication::class);
+    }
+
+
     public function getFullNameAttribute()
     {
         return trim(collect([$this->first_name, $this->middle_name, $this->last_name])->filter()->implode(' '));

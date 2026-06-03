@@ -33,19 +33,46 @@ class Certificate extends Model
         'revoked_at',
         'revoked_by',
         'revocation_reason',
+        'revocation_history',
+        'issued_name',
     ];
 
     protected $casts = [
-        'cgpa' => 'decimal:2',
-        'issue_date' => 'date',
-        'convocation_date' => 'date',
-        'revoked_at' => 'datetime',
-        'is_publicly_shareable' => 'boolean',
+        'cgpa'                 => 'decimal:2',
+        'issue_date'           => 'date',
+        'convocation_date'     => 'date',
+        'revoked_at'           => 'datetime',
+        'is_publicly_shareable'=> 'boolean',
+        'revocation_history'   => 'array',
     ];
 
     public function isRevoked(): bool
     {
         return $this->revoked_at !== null;
+    }
+
+    /**
+     * Append a status-change entry to the certificate's revocation_history log.
+     *
+     * @param string $action      'revoked' | 'restored'
+     * @param int    $performedBy User ID performing the action
+     * @param string $role        Role of the performing user
+     * @param string $reason      Human-readable reason
+     * @param string $name        Display name of the performing user
+     */
+    public function appendRevocationHistory(string $action, int $performedBy, string $role, string $reason, string $name): void
+    {
+        $history = $this->revocation_history ?? [];
+        $history[] = [
+            'action'       => $action,
+            'performed_by' => $performedBy,
+            'performed_by_name' => $name,
+            'role'         => $role,
+            'reason'       => $reason,
+            'timestamp'    => now()->toIso8601String(),
+        ];
+        $this->revocation_history = $history;
+        $this->saveQuietly();
     }
 
     /**
