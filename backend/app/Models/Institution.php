@@ -18,6 +18,8 @@ class Institution extends Model
         'city',
         'phone',
         'website',
+        'default_authority_name',
+        'default_authority_title',
     ];
 
     public function user()
@@ -28,6 +30,11 @@ class Institution extends Model
     public function certificates()
     {
         return $this->hasMany(Certificate::class);
+    }
+
+    public function departments()
+    {
+        return $this->hasMany(Department::class);
     }
 
     public function enrollments()
@@ -46,4 +53,10 @@ class Institution extends Model
     {
         return $this->hasMany(Enrollment::class)->where('status', 'active');
     }
+
+    public function enrollmentApplications()
+    {
+        return $this->hasMany(EnrollmentApplication::class);
+    }
+
 }

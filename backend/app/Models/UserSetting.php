@@ -7,10 +7,20 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class UserSetting extends Model
 {
-    protected $fillable = ['user_id', 'preferences'];
+    protected $fillable = [
+        'user_id',
+        'preferences',
+        'profile_visibility',
+        'allow_verifier_search',
+        'show_email_to_verifiers',
+        'show_institution_to_public',
+    ];
 
     protected $casts = [
         'preferences' => 'array',
+        'allow_verifier_search' => 'boolean',
+        'show_email_to_verifiers' => 'boolean',
+        'show_institution_to_public' => 'boolean',
     ];
 
     public function user(): BelongsTo
@@ -42,9 +52,7 @@ class UserSetting extends Model
                 'frequency' => 'instant',
             ],
             'privacy' => [
-                'profile_visibility' => 'public',
                 'certificate_default' => 'public',
-                'show_email_to_verifiers' => false,
                 'show_phone_to_verifiers' => false,
                 'allow_university_search' => true,
             ],
@@ -59,22 +67,28 @@ class UserSetting extends Model
         $roleSpecific = match ($role) {
             'student' => [
                 'certificate_preferences' => [
-                    'default_visibility' => 'public',
-                    'auto_approve_verifier' => false,
-                    'default_access_duration' => 30,
-                    'notify_certificate_viewed' => true,
+                    // default_certificate_visibility
+                    'default_visibility'         => 'private',
+                    // auto_approve_access_requests
+                    'auto_approve_verifier'      => false,
+                    // default_access_duration_days
+                    'default_access_duration'    => 30,
+                    'notify_certificate_viewed'  => true,
                 ],
                 'enrollment_preferences' => [
-                    'notify_status_changes' => true,
+                    'notify_status_changes'      => true,
                     'notify_graduation_extended' => true,
                 ],
             ],
             'university' => [
                 'institution_preferences' => [
+                    // auto_graduate_on_certificate_issue
                     'auto_graduate_on_certificate' => true,
-                    'auto_generate_student_ids' => true,
-                    'student_id_prefix' => '',
-                    'default_certificate_prefix' => 'BSC',
+                    'auto_generate_student_ids'    => true,
+                    'student_id_prefix'            => '',
+                    'default_certificate_prefix'   => 'BSC',
+                    // student_id_format (e.g. "UIU-{YEAR}-{SEQ}")
+                    'student_id_format'            => null,
                 ],
                 'enrollment_settings' => [
                     'default_session_duration_years' => 4,
@@ -82,10 +96,13 @@ class UserSetting extends Model
             ],
             'verifier' => [
                 'verification_preferences' => [
+                    // auto_log_verifications
                     'auto_log_verifications' => true,
-                    'require_note' => false,
-                    'default_method' => 'serial_dob',
-                    'notify_access_expires' => true,
+                    // require_verification_notes
+                    'require_note'           => false,
+                    // default_verification_method: manual / qr / link
+                    'default_method'         => 'manual',
+                    'notify_access_expires'  => true,
                 ],
                 'access_request_settings' => [
                     'default_duration_days' => 30,
@@ -93,10 +110,14 @@ class UserSetting extends Model
             ],
             'admin' => [
                 'system_preferences' => [
-                    'require_approval_new_users' => true,
-                    'auto_approve_verified_emails' => false,
-                    'daily_summary_report' => true,
-                    'profile_change_auto_approve' => 'never',
+                    // require_approval_for_universities
+                    'require_approval_universities'  => true,
+                    // require_approval_for_verifiers
+                    'require_approval_verifiers'     => true,
+                    'require_approval_new_users'     => true,
+                    'auto_approve_verified_emails'   => false,
+                    'daily_summary_report'           => true,
+                    'profile_change_auto_approve'    => 'never',
                 ],
             ],
             default => [],
