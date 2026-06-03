@@ -15,8 +15,8 @@ INSERT INTO users (id, email, password, role, email_verified_at, is_approved, ap
 (6,  'demo@enosis.com',             '$2y$12$KQuyd8vLPSkE4EiTxkw/DuS316qiKBbNx80i/mwuRPmOEaKhXxiEm', 'verifier',   NOW(), 1,    1,    NOW(), NOW(), NOW()),
 (7,  'demo@brainstation-23.com',    '$2y$12$KQuyd8vLPSkE4EiTxkw/DuS316qiKBbNx80i/mwuRPmOEaKhXxiEm', 'verifier',   NOW(), 1,    1,    NOW(), NOW(), NOW()),
 (8,  'ssadidahmed07@gmail.com',     '$2y$12$KQuyd8vLPSkE4EiTxkw/DuS316qiKBbNx80i/mwuRPmOEaKhXxiEm', 'verifier',   NOW(), 1,    1,    NOW(), NOW(), NOW()),
-(9,  'rahela.khatun@gmail.com',     '$2y$12$KQuyd8vLPSkE4EiTxkw/DuS316qiKBbNx80i/mwuRPmOEaKhXxiEm', 'student',    NOW(), 1,    1,    NOW(), NOW(), NOW()),
-(10, 'tanvir.hossain@gmail.com',    '$2y$12$KQuyd8vLPSkE4EiTxkw/DuS316qiKBbNx80i/mwuRPmOEaKhXxiEm', 'student',    NOW(), 1,    1,    NOW(), NOW(), NOW()),
+(9,  'kanij.fatema@gmail.com',      '$2y$12$KQuyd8vLPSkE4EiTxkw/DuS316qiKBbNx80i/mwuRPmOEaKhXxiEm', 'student',    NOW(), 1,    1,    NOW(), NOW(), NOW()),
+(10, 'safwan.al.sajid@gmail.com',   '$2y$12$KQuyd8vLPSkE4EiTxkw/DuS316qiKBbNx80i/mwuRPmOEaKhXxiEm', 'student',    NOW(), 1,    1,    NOW(), NOW(), NOW()),
 (11, 'pending.student@gmail.com',   '$2y$12$KQuyd8vLPSkE4EiTxkw/DuS316qiKBbNx80i/mwuRPmOEaKhXxiEm', 'student',    NOW(), 0,    NULL, NULL,  NOW(), NOW());
 
 -- Institution
@@ -28,8 +28,8 @@ INSERT INTO students (id, user_id, first_name, last_name, nid_hash, date_of_birt
 (1, 3,  'Sadid',      'Ahmed',   SHA2('NID-010101-001', 256), '2002-01-01', '+8801700001001', 'Mirpur, Dhaka',     '0112330154', NOW(), NOW()),
 (2, 4,  'M.M. Sayem', 'Prodhan', SHA2('NID-010101-002', 256), '2002-01-01', '+8801700001002', 'Mohammadpur, Dhaka','0112330411', NOW(), NOW()),
 (3, 5,  'Assaduzzaman','Nur',    SHA2('NID-010101-003', 256), '2002-01-01', '+8801700001003', 'Uttara, Dhaka',     '0112230442', NOW(), NOW()),
-(4, 9,  'Rahela',     'Khatun',  SHA2('NID-010101-004', 256), '2001-06-15', '+8801700001004', 'Gulshan, Dhaka',    '0112230501', NOW(), NOW()),
-(5, 10, 'Tanvir',     'Hossain', SHA2('NID-010101-005', 256), '2000-11-20', '+8801700001005', 'Dhanmondi, Dhaka',  '0112230502', NOW(), NOW()),
+(4, 9,  'Kanij',      'Fatema',  SHA2('NID-010101-004', 256), '2001-06-15', '+8801700001004', 'Gulshan, Dhaka',    '0112230501', NOW(), NOW()),
+(5, 10, 'Safwan Al',  'Sajid',   SHA2('NID-010101-005', 256), '2000-11-20', '+8801700001005', 'Dhanmondi, Dhaka',  '0112230502', NOW(), NOW()),
 (6, 11, 'Pending',    'Student', SHA2('NID-010101-006', 256), '2003-03-10', '+8801700001006', 'Banani, Dhaka',     '0112230999', NOW(), NOW());
 
 -- Verifiers
@@ -99,19 +99,25 @@ INSERT INTO activity_logs (id, user_id, action, entity_type, entity_id, descript
 (6,  2, 'certificate_issued',    'App\\Models\\Certificate', 1, 'Issued certificate BSC-26-000001B to Sadid Ahmed.',                       '{"serial":"BSC-26-000001B","level":"undergraduate"}',     '127.0.0.1', DATE_SUB(NOW(), INTERVAL 4 DAY),  DATE_SUB(NOW(), INTERVAL 4 DAY)),
 (7,  2, 'certificate_issued',    'App\\Models\\Certificate', 2, 'Issued certificate BSC-26-000002C to M.M. Sayem Prodhan.',                '{"serial":"BSC-26-000002C","level":"undergraduate"}',     '127.0.0.1', DATE_SUB(NOW(), INTERVAL 4 DAY),  DATE_SUB(NOW(), INTERVAL 4 DAY)),
 (8,  2, 'certificate_issued',    'App\\Models\\Certificate', 3, 'Issued certificate BSC-26-000003D to Assaduzzaman Nur.',                  '{"serial":"BSC-26-000003D","level":"undergraduate"}',     '127.0.0.1', DATE_SUB(NOW(), INTERVAL 4 DAY),  DATE_SUB(NOW(), INTERVAL 4 DAY)),
-(9,  1, 'certificate_revoked',   'App\\Models\\Certificate', 5, 'Revoked certificate BSC-26-000005F for Tanvir Hossain.',                  '{"serial":"BSC-26-000005F","reason":"Administrative grading error."}', '127.0.0.1', DATE_SUB(NOW(), INTERVAL 2 DAY), DATE_SUB(NOW(), INTERVAL 2 DAY)),
+(9,  1, 'certificate_revoked',   'App\\Models\\Certificate', 5, 'Revoked certificate BSC-26-000005F for Safwan Al Sajid.',                  '{"serial":"BSC-26-000005F","reason":"Administrative grading error."}', '127.0.0.1', DATE_SUB(NOW(), INTERVAL 2 DAY), DATE_SUB(NOW(), INTERVAL 2 DAY)),
 (10, 3, 'profile_updated',       'App\\Models\\User',        3, 'Student Sadid Ahmed updated their profile.',                             '{"role":"student"}',                                     '127.0.0.1', DATE_SUB(NOW(), INTERVAL 1 DAY),  DATE_SUB(NOW(), INTERVAL 1 DAY)),
 (11, 6, 'access_request_sent',   'App\\Models\\CertificateAccessRequest', 1, 'Enosis Solutions sent an access request to Assaduzzaman Nur.',  '{"verifier":"Enosis Solutions"}',                  '127.0.0.1', NOW(),                            NOW()),
 (12, 3, 'certificate_downloaded','App\\Models\\Certificate', 1, 'Student Sadid Ahmed downloaded certificate BSC-26-000001B.',              '{"serial":"BSC-26-000001B"}',                             '127.0.0.1', NOW(),                            NOW());
 
 -- User Settings (defaults for all approved users)
-INSERT INTO user_settings (user_id, preferences, created_at, updated_at) VALUES
-(2,  '{"default_certificate_visibility": "public", "notify_access_request": true, "notify_certificate_issued": true, "notify_access_approved": true, "notify_access_rejected": true, "notify_profile_change": true}', NOW(), NOW()),
-(3,  '{"default_certificate_visibility": "public", "notify_access_request": true, "notify_certificate_issued": true, "notify_access_approved": true, "notify_access_rejected": true, "notify_profile_change": true}', NOW(), NOW()),
-(4,  '{"default_certificate_visibility": "public", "notify_access_request": true, "notify_certificate_issued": true, "notify_access_approved": true, "notify_access_rejected": true, "notify_profile_change": true}', NOW(), NOW()),
-(5,  '{"default_certificate_visibility": "private", "notify_access_request": true, "notify_certificate_issued": true, "notify_access_approved": true, "notify_access_rejected": true, "notify_profile_change": true}', NOW(), NOW()),
-(6,  '{"default_certificate_visibility": "public", "notify_access_request": true, "notify_certificate_issued": true, "notify_access_approved": true, "notify_access_rejected": true, "notify_profile_change": true}', NOW(), NOW()),
-(7,  '{"default_certificate_visibility": "public", "notify_access_request": true, "notify_certificate_issued": true, "notify_access_approved": true, "notify_access_rejected": true, "notify_profile_change": true}', NOW(), NOW()),
-(8,  '{"default_certificate_visibility": "public", "notify_access_request": true, "notify_certificate_issued": true, "notify_access_approved": true, "notify_access_rejected": true, "notify_profile_change": true}', NOW(), NOW()),
-(9,  '{"default_certificate_visibility": "public", "notify_access_request": true, "notify_certificate_issued": true, "notify_access_approved": true, "notify_access_rejected": true, "notify_profile_change": true}', NOW(), NOW()),
-(10, '{"default_certificate_visibility": "public", "notify_access_request": true, "notify_certificate_issued": true, "notify_access_approved": true, "notify_access_rejected": true, "notify_profile_change": true}', NOW(), NOW());
+INSERT INTO user_settings (user_id, preferences, profile_visibility, allow_verifier_search, show_email_to_verifiers, show_institution_to_public, created_at, updated_at) VALUES
+(2,  '{"default_certificate_visibility": "public", "notify_access_request": true, "notify_certificate_issued": true, "notify_access_approved": true, "notify_access_rejected": true, "notify_profile_change": true}', 'verifiers_only', 1, 0, 1, NOW(), NOW()),
+(3,  '{"default_certificate_visibility": "public", "notify_access_request": true, "notify_certificate_issued": true, "notify_access_approved": true, "notify_access_rejected": true, "notify_profile_change": true}', 'public', 1, 1, 1, NOW(), NOW()),
+(4,  '{"default_certificate_visibility": "public", "notify_access_request": true, "notify_certificate_issued": true, "notify_access_approved": true, "notify_access_rejected": true, "notify_profile_change": true}', 'private', 0, 0, 0, NOW(), NOW()),
+(5,  '{"default_certificate_visibility": "private", "notify_access_request": true, "notify_certificate_issued": true, "notify_access_approved": true, "notify_access_rejected": true, "notify_profile_change": true}', 'verifiers_only', 1, 0, 1, NOW(), NOW()),
+(6,  '{"default_certificate_visibility": "public", "notify_access_request": true, "notify_certificate_issued": true, "notify_access_approved": true, "notify_access_rejected": true, "notify_profile_change": true}', 'verifiers_only', 1, 0, 1, NOW(), NOW()),
+(7,  '{"default_certificate_visibility": "public", "notify_access_request": true, "notify_certificate_issued": true, "notify_access_approved": true, "notify_access_rejected": true, "notify_profile_change": true}', 'verifiers_only', 1, 0, 1, NOW(), NOW()),
+(8,  '{"default_certificate_visibility": "public", "notify_access_request": true, "notify_certificate_issued": true, "notify_access_approved": true, "notify_access_rejected": true, "notify_profile_change": true}', 'verifiers_only', 1, 0, 1, NOW(), NOW()),
+(9,  '{"default_certificate_visibility": "public", "notify_access_request": true, "notify_certificate_issued": true, "notify_access_approved": true, "notify_access_rejected": true, "notify_profile_change": true}', 'verifiers_only', 1, 0, 1, NOW(), NOW()),
+(10, '{"default_certificate_visibility": "public", "notify_access_request": true, "notify_certificate_issued": true, "notify_access_approved": true, "notify_access_rejected": true, "notify_profile_change": true}', 'verifiers_only', 1, 0, 1, NOW(), NOW());
+
+-- Enrollment Applications
+INSERT INTO enrollment_applications (id, student_id, institution_id, program, batch, reason, status, university_response, reviewed_by, reviewed_at, created_at, updated_at) VALUES
+(1, 6, 1, 'Bachelor of Science in Computer Science and Engineering', 'Spring 2026', 'I have always wanted to study at UIU because of its excellent CSE department.', 'pending', NULL, NULL, NULL, DATE_SUB(NOW(), INTERVAL 2 DAY), DATE_SUB(NOW(), INTERVAL 2 DAY)),
+(2, 4, 1, 'Master of Business Administration', 'Fall 2026', 'I wish to pursue my MBA here after completing my BBA.', 'more_info_requested', 'Please upload your BBA transcripts to proceed with the application.', 2, DATE_SUB(NOW(), INTERVAL 1 DAY), DATE_SUB(NOW(), INTERVAL 3 DAY), DATE_SUB(NOW(), INTERVAL 1 DAY)),
+(3, 5, 1, 'MSc in Electrical and Electronic Engineering', 'Spring 2026', 'I want to continue my higher studies here.', 'rejected', 'We regret to inform you that we are not taking new students for this batch.', 2, DATE_SUB(NOW(), INTERVAL 1 DAY), DATE_SUB(NOW(), INTERVAL 4 DAY), DATE_SUB(NOW(), INTERVAL 1 DAY));
