@@ -5,7 +5,7 @@ import {
   ArrowLeft, GraduationCap, Building2, ShieldCheck, UserCog, Eye,
   CheckCircle, XCircle, Clock, Mail, Calendar, Hash, User, Award,
   FileText, Activity, BookOpen, ExternalLink, UserCheck, ChevronLeft,
-  ChevronRight,
+  ChevronRight, RotateCcw,
 } from 'lucide-react';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import Card from '../../components/shared/Card';
@@ -13,6 +13,8 @@ import Button from '../../components/shared/Button';
 import Badge from '../../components/shared/Badge';
 import LoadingSpinner from '../../components/shared/LoadingSpinner';
 import Modal from '../../components/shared/Modal';
+import RestoreModal from '../../components/shared/RestoreModal';
+import StatusTimeline from '../../components/shared/StatusTimeline';
 import api from '../../services/api';
 
 const ROLE_CONFIG = {
@@ -103,6 +105,10 @@ export default function AdminUserDetails() {
   // Certificate detail modal
   const [certDetail, setCertDetail] = useState(null);
   const [certDetailLoading, setCertDetailLoading] = useState(false);
+
+  // Restore modal
+  const [restoreTarget, setRestoreTarget] = useState(null);
+  const [restoreLoading, setRestoreLoading] = useState(false);
 
   // Reject modal
   const [showReject, setShowReject] = useState(false);
@@ -212,6 +218,41 @@ export default function AdminUserDetails() {
     } finally {
       setCertDetailLoading(false);
     }
+  };
+
+  const handleRestoreClick = (cert) => {
+    setRestoreTarget(cert);
+  };
+
+  const handleRestore = (reason) => {
+    if (!restoreTarget) return;
+    setRestoreLoading(true);
+
+    api.post(`/admin/certificates/${restoreTarget.id}/restore`, { reason })
+      .then(({ data }) => {
+        toast.success('Certificate restored successfully');
+        // Update certDetail state so UI reflects the change without reload
+        setCertDetail(prev => ({
+          ...prev,
+          revoked_at: null,
+          revocation_reason: null,
+          revoked_by_name: null,
+          revocation_history: data.certificate?.revocation_history ?? prev.revocation_history,
+        }));
+        // Update the certificates list in the Certificates tab
+        setCertificates(prev => prev.map(c =>
+          c.id === restoreTarget.id
+            ? { ...c, revoked_at: null, revocation_reason: null }
+            : c
+        ));
+        setRestoreTarget(null);
+      })
+      .catch(err => {
+        toast.error(err.response?.data?.error || 'Failed to restore certificate.');
+      })
+      .finally(() => {
+        setRestoreLoading(false);
+      });
   };
 
   if (loading) {
@@ -355,12 +396,24 @@ export default function AdminUserDetails() {
         </div>
       </Modal>
 
+      {/* Restore Certificate Modal */}
+      <RestoreModal
+        certificate={restoreTarget}
+        onClose={() => setRestoreTarget(null)}
+        onConfirm={handleRestore}
+        loading={restoreLoading}
+      />
+
       {/* Certificate Details Modal */}
       <Modal open={!!certDetail} onClose={() => setCertDetail(null)} title="Certificate Details" size="lg">
         {certDetailLoading ? (
           <div className="flex justify-center py-10"><LoadingSpinner /></div>
         ) : certDetail ? (
-          <CertificateDetailContent cert={certDetail} onViewStudent={(uid) => { setCertDetail(null); navigate(`/admin/users/${uid}`); }} />
+          <CertificateDetailContent
+            cert={certDetail}
+            onViewStudent={(uid) => { setCertDetail(null); navigate(`/admin/users/${uid}`); }}
+            onRestoreClick={handleRestoreClick}
+          />
         ) : null}
       </Modal>
     </DashboardLayout>
@@ -382,8 +435,19 @@ function OverviewTab({ user }) {
         {user.profile ? (
           <div className="divide-y divide-gray-100 dark:divide-gray-800">
             {Object.entries(user.profile).map(([key, value]) => {
-              if (key === 'nid_set') {
-                return <InfoRow key={key} icon={Hash} label="NID/Birth Cert" value={value ? 'Set ✓' : 'Not Set'} />;
+              if (key === 'nid_status') {
+                return (
+                  <div key={key} className="flex items-start gap-3 py-2.5 border-b border-gray-100 dark:border-gray-800 last:border-0 flex-col sm:flex-row">
+                    <Hash className="mt-0.5 h-4 w-4 flex-shrink-0 text-gray-400" />
+                    <span className="w-40 flex-shrink-0 text-sm text-gray-500 dark:text-gray-400">National ID</span>
+                    <div>
+                      <span className="text-sm font-medium text-gray-900 dark:text-white break-all">{value}</span>
+                      {value === 'NID verified (hash only)' && (
+                        <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">Note: Full NID cannot be recovered as it is stored securely as a one-way hash.</p>
+                      )}
+                    </div>
+                  </div>
+                );
               }
               const label = key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
               return <InfoRow key={key} icon={User} label={label} value={value} />;
@@ -623,28 +687,40 @@ function PaginationBar({ currentPage, lastPage, onPageChange }) {
    CERTIFICATE DETAILS MODAL CONTENT
    ═══════════════════════════════════════════════════════════════════════ */
 
-function CertificateDetailContent({ cert, onViewStudent }) {
+function CertificateDetailContent({ cert, onViewStudent, onRestoreClick }) {
   return (
     <div className="space-y-5">
       {/* Status banner */}
-      <div className={`rounded-xl px-4 py-3 flex items-center gap-3 ${
+      <div className={`rounded-xl px-4 py-3 flex items-center justify-between gap-3 ${
         cert.revoked_at
           ? 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800'
           : 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800'
       }`}>
-        {cert.revoked_at ? (
-          <XCircle className="h-5 w-5 text-red-600 flex-shrink-0" />
-        ) : (
-          <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0" />
-        )}
-        <div>
-          <p className={`text-sm font-semibold ${cert.revoked_at ? 'text-red-800 dark:text-red-300' : 'text-green-800 dark:text-green-300'}`}>
-            {cert.revoked_at ? 'Certificate Revoked' : 'Certificate Active'}
-          </p>
-          {cert.revoked_at && cert.revocation_reason && (
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Reason: {cert.revocation_reason}</p>
+        <div className="flex items-center gap-3">
+          {cert.revoked_at ? (
+            <XCircle className="h-5 w-5 text-red-600 flex-shrink-0" />
+          ) : (
+            <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0" />
           )}
+          <div>
+            <p className={`text-sm font-semibold ${cert.revoked_at ? 'text-red-800 dark:text-red-300' : 'text-green-800 dark:text-green-300'}`}>
+              {cert.revoked_at ? 'Certificate Revoked' : 'Certificate Active'}
+            </p>
+            {cert.revoked_at && cert.revocation_reason && (
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Reason: {cert.revocation_reason}</p>
+            )}
+          </div>
         </div>
+
+        {/* Restore button — only visible when revoked, admin-only route enforces access */}
+        {cert.revoked_at && onRestoreClick && (
+          <button
+            onClick={() => onRestoreClick(cert)}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-900/20 px-3 py-1.5 text-xs font-medium text-green-700 dark:text-green-300 hover:bg-green-100 dark:hover:bg-green-900/40 transition flex-shrink-0"
+          >
+            <RotateCcw className="h-3.5 w-3.5" /> Restore Certificate
+          </button>
+        )}
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[1.4fr_0.6fr]">
@@ -715,6 +791,12 @@ function CertificateDetailContent({ cert, onViewStudent }) {
           </div>
         </div>
       </div>
+
+      {/* Status Timeline */}
+      <StatusTimeline
+        history={cert.revocation_history}
+        issueDate={cert.issue_date}
+      />
     </div>
   );
 }
