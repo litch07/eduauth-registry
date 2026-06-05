@@ -13,9 +13,11 @@ import api from '../../services/api';
 import {
   FileText, ShieldX, RefreshCw, Eye, Search, X, Filter,
   Hash, Award, Calendar, User, Building2, ShieldCheck, Clock,
-  CheckCircle, XCircle, ExternalLink,
+  CheckCircle, XCircle, ExternalLink, RotateCcw,
 } from 'lucide-react';
 import RevocationModal from '../../components/shared/RevocationModal';
+import RestoreModal from '../../components/shared/RestoreModal';
+import StatusTimeline from '../../components/shared/StatusTimeline';
 
 function InfoRow({ icon: Icon, label, value }) {
   if (value === undefined || value === null || value === '') return null;
@@ -34,8 +36,15 @@ export default function AdminCertificates() {
   const [filtered, setFiltered] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  // Revoke modal state
   const [selectedCertificate, setSelectedCertificate] = useState(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isRevokeModalOpen, setIsRevokeModalOpen] = useState(false);
+
+  // Restore modal state
+  const [restoreTarget, setRestoreTarget] = useState(null);
+  const [restoreLoading, setRestoreLoading] = useState(false);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
 
@@ -82,13 +91,14 @@ export default function AdminCertificates() {
     setFiltered(result);
   }, [certificates, searchQuery, statusFilter]);
 
+  /* ── Revoke handlers ─────────────────────────────────────────────────── */
   const handleRevokeClick = (certificate) => {
     setSelectedCertificate(certificate);
-    setIsModalOpen(true);
+    setIsRevokeModalOpen(true);
   };
 
-  const handleModalClose = () => {
-    setIsModalOpen(false);
+  const handleRevokeModalClose = () => {
+    setIsRevokeModalOpen(false);
     setSelectedCertificate(null);
   };
 
@@ -98,16 +108,69 @@ export default function AdminCertificates() {
     api.post(`/admin/certificates/${selectedCertificate.id}/revoke`, { reason })
       .then(() => {
         toast.success('Certificate revoked successfully');
-        setCertificates(certs => certs.map(c => 
-          c.id === selectedCertificate.id ? { ...c, revoked_at: new Date().toISOString(), revocation_reason: reason } : c
+        setCertificates(certs => certs.map(c =>
+          c.id === selectedCertificate.id
+            ? { ...c, revoked_at: new Date().toISOString(), revocation_reason: reason }
+            : c
         ));
-        handleModalClose();
+        // Sync details modal if it's open for this cert
+        if (certDetail?.id === selectedCertificate.id) {
+          setCertDetail(prev => ({
+            ...prev,
+            revoked_at: new Date().toISOString(),
+            revocation_reason: reason,
+          }));
+        }
+        handleRevokeModalClose();
       })
       .catch(err => {
         toast.error(err.response?.data?.error || 'Failed to revoke certificate.');
       });
   };
 
+  /* ── Restore handlers ────────────────────────────────────────────────── */
+  const handleRestoreClick = (certificate) => {
+    setRestoreTarget(certificate);
+  };
+
+  const handleRestoreModalClose = () => {
+    setRestoreTarget(null);
+  };
+
+  const handleRestore = (reason) => {
+    if (!restoreTarget) return;
+    setRestoreLoading(true);
+
+    api.post(`/admin/certificates/${restoreTarget.id}/restore`, { reason })
+      .then(({ data }) => {
+        toast.success('Certificate restored successfully');
+        // Update table list
+        setCertificates(certs => certs.map(c =>
+          c.id === restoreTarget.id
+            ? { ...c, revoked_at: null, revocation_reason: null, revocation_history: data.certificate?.revocation_history }
+            : c
+        ));
+        // Update details modal if open for this cert
+        if (certDetail?.id === restoreTarget.id) {
+          setCertDetail(prev => ({
+            ...prev,
+            revoked_at: null,
+            revocation_reason: null,
+            revoked_by_name: null,
+            revocation_history: data.certificate?.revocation_history ?? prev.revocation_history,
+          }));
+        }
+        setRestoreTarget(null);
+      })
+      .catch(err => {
+        toast.error(err.response?.data?.error || 'Failed to restore certificate.');
+      })
+      .finally(() => {
+        setRestoreLoading(false);
+      });
+  };
+
+  /* ── Details modal ───────────────────────────────────────────────────── */
   const openDetails = async (certId) => {
     setDetailLoading(true);
     try {
@@ -169,7 +232,7 @@ export default function AdminCertificates() {
             </select>
           </div>
         </Card>
-        
+
         {loading ? (
           <div className="flex min-h-[50vh] items-center justify-center">
             <LoadingSpinner />
@@ -216,12 +279,24 @@ export default function AdminCertificates() {
                           >
                             <Eye className="h-3 w-3" /> Details
                           </button>
+
+                          {/* Revoke button — only when active */}
                           {!cert.revoked_at && (
                             <button
                               onClick={() => handleRevokeClick(cert)}
                               className="inline-flex items-center gap-1 rounded-lg border border-red-200 dark:border-red-800 px-2.5 py-1 text-xs font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition"
                             >
                               <ShieldX className="h-3 w-3" /> Revoke
+                            </button>
+                          )}
+
+                          {/* Restore button — only when revoked */}
+                          {cert.revoked_at && (
+                            <button
+                              onClick={() => handleRestoreClick(cert)}
+                              className="inline-flex items-center gap-1 rounded-lg border border-green-200 dark:border-green-800 px-2.5 py-1 text-xs font-medium text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20 transition"
+                            >
+                              <RotateCcw className="h-3 w-3" /> Restore
                             </button>
                           )}
                         </div>
@@ -234,13 +309,23 @@ export default function AdminCertificates() {
           </Card>
         )}
       </div>
-      {isModalOpen && (
+
+      {/* Revoke Modal — behavior unchanged */}
+      {isRevokeModalOpen && (
         <RevocationModal
           certificate={selectedCertificate}
-          onClose={handleModalClose}
+          onClose={handleRevokeModalClose}
           onConfirm={handleRevocation}
         />
       )}
+
+      {/* Restore Modal */}
+      <RestoreModal
+        certificate={restoreTarget}
+        onClose={handleRestoreModalClose}
+        onConfirm={handleRestore}
+        loading={restoreLoading}
+      />
 
       {/* Certificate Details Modal */}
       <Modal open={!!certDetail} onClose={() => setCertDetail(null)} title="Certificate Details" size="lg">
@@ -249,24 +334,36 @@ export default function AdminCertificates() {
         ) : certDetail ? (
           <div className="space-y-5">
             {/* Status banner */}
-            <div className={`rounded-xl px-4 py-3 flex items-center gap-3 ${
+            <div className={`rounded-xl px-4 py-3 flex items-center justify-between gap-3 ${
               certDetail.revoked_at
                 ? 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800'
                 : 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800'
             }`}>
-              {certDetail.revoked_at ? (
-                <XCircle className="h-5 w-5 text-red-600 flex-shrink-0" />
-              ) : (
-                <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0" />
-              )}
-              <div>
-                <p className={`text-sm font-semibold ${certDetail.revoked_at ? 'text-red-800 dark:text-red-300' : 'text-green-800 dark:text-green-300'}`}>
-                  {certDetail.revoked_at ? 'Certificate Revoked' : 'Certificate Active'}
-                </p>
-                {certDetail.revoked_at && certDetail.revocation_reason && (
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Reason: {certDetail.revocation_reason}</p>
+              <div className="flex items-center gap-3">
+                {certDetail.revoked_at ? (
+                  <XCircle className="h-5 w-5 text-red-600 flex-shrink-0" />
+                ) : (
+                  <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0" />
                 )}
+                <div>
+                  <p className={`text-sm font-semibold ${certDetail.revoked_at ? 'text-red-800 dark:text-red-300' : 'text-green-800 dark:text-green-300'}`}>
+                    {certDetail.revoked_at ? 'Certificate Revoked' : 'Certificate Active'}
+                  </p>
+                  {certDetail.revoked_at && certDetail.revocation_reason && (
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Reason: {certDetail.revocation_reason}</p>
+                  )}
+                </div>
               </div>
+
+              {/* Restore button inside details modal — only when revoked */}
+              {certDetail.revoked_at && (
+                <button
+                  onClick={() => handleRestoreClick(certDetail)}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-900/20 px-3 py-1.5 text-xs font-medium text-green-700 dark:text-green-300 hover:bg-green-100 dark:hover:bg-green-900/40 transition flex-shrink-0"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" /> Restore Certificate
+                </button>
+              )}
             </div>
 
             <div className="grid gap-6 lg:grid-cols-[1.4fr_0.6fr]">
@@ -337,6 +434,12 @@ export default function AdminCertificates() {
                 </div>
               </div>
             </div>
+
+            {/* Status Timeline */}
+            <StatusTimeline
+              history={certDetail.revocation_history}
+              issueDate={certDetail.issue_date}
+            />
           </div>
         ) : null}
       </Modal>
