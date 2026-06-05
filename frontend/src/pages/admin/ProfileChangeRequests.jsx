@@ -325,6 +325,25 @@ export default function ProfileChangeRequests() {
                 </div>
               )}
 
+              {/* Certificate impact notice for name changes */}
+              {selectedRequest.status === 'pending' &&
+                ['first_name', 'middle_name', 'last_name'].includes(selectedRequest.field_name) &&
+                selectedRequest.certificate_count > 0 && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-800/40 dark:bg-amber-900/20">
+                  <div className="flex items-start gap-3">
+                    <FileText className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-600 dark:text-amber-400" />
+                    <div>
+                      <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+                        Certificate Impact Notice
+                      </p>
+                      <p className="mt-1 text-sm text-amber-700 dark:text-amber-300">
+                        This student has <strong>{selectedRequest.certificate_count}</strong> issued certificate{selectedRequest.certificate_count !== 1 ? 's' : ''}. Upon approval, all certificate PDFs will display the new legal name on next download.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Action buttons — only for pending */}
               {selectedRequest.status === 'pending' && (
                 <div className="flex gap-3 pt-2">
