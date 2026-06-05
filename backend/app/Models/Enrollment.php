@@ -55,6 +55,11 @@ class Enrollment extends Model
         return $this->hasMany(WithdrawalRequest::class);
     }
 
+    public function extensionRequests()
+    {
+        return $this->hasMany(ExtensionRequest::class);
+    }
+
     public function scopeActive($query)
     {
         return $query->where('status', 'active');
