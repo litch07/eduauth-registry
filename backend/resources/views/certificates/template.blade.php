@@ -40,46 +40,28 @@
             font-style: italic;
             color: #bda853;
         }
-        .subtitle {
-            margin-top: 28px;
-            font-family: 'Helvetica', 'Arial', sans-serif;
-            font-size: 15px;
-            color: #555;
-            letter-spacing: 1px;
-            text-transform: uppercase;
-        }
         .student-name {
-            margin-top: 12px;
-            font-size: 40px;
+            font-size: 26px;
             font-weight: bold;
             color: #111;
-            border-bottom: 2px solid #cbd5e1;
             display: inline-block;
-            padding-bottom: 5px;
-            min-width: 300px;
-        }
-        .student-id {
-            font-family: 'Helvetica', 'Arial', sans-serif;
-            font-size: 14px;
-            color: #475569;
-            margin-top: 8px;
         }
         .certificate-text {
             font-family: 'Times New Roman', serif;
-            font-size: 18px;
-            line-height: 1.7;
+            font-size: 24px;
+            line-height: 1.2;
             color: #334155;
-            margin: 28px auto 0;
-            width: 82%;
-            text-align: justify;
+            margin: 50px auto 0;
+            width: 85%;
+            text-align: center;
         }
-        .certificate-text-cgpa {
+        .certificate-meta {
             font-family: 'Times New Roman', serif;
-            font-size: 18px;
-            line-height: 1.7;
+            font-size: 20px;
+            line-height: 1.2;
             color: #334155;
-            margin: 10px auto 0;
-            width: 82%;
+            margin: 15px auto 0;
+            width: 85%;
             text-align: center;
         }
         table.footer {
@@ -126,41 +108,26 @@
 
             <div class="title">Certificate of Achievement</div>
 
-            <div class="subtitle">This is to certify that</div>
-
-            <div class="student-name">{{ $student->user->name }}</div>
-
-            <div class="student-id">Student ID: <strong>{{ $student->student_id }}</strong></div>
-
             <div class="certificate-text">
-                having successfully completed the prescribed course of study and passed the requisite examinations,
-                has been duly admitted to the degree of
-                <strong>{{ $certificate->certificate_level }}@if($certificate->certificate_name) of {{ $certificate->certificate_name }}@endif</strong>
-                @if($certificate->major)
-                    (Major in {{ $certificate->major }})
-                @endif
-                @if($certificate->department)
-                    under the Department of <strong>{{ $certificate->department }}</strong>
-                @endif
-                @if($certificate->session)
-                    for the Academic Session of <strong>{{ $certificate->session }}</strong>.
-                @else
-                    .
-                @endif
+                This is to certify that <span class="student-name">{{ $student->user->name }}</span> has successfully completed the requirements for the degree of <strong>{{ $certificate->certificate_level }}@if($certificate->certificate_name) {{ $certificate->certificate_name }}@endif</strong>@if($certificate->major) in <strong>{{ $certificate->major }}</strong>@endif.
             </div>
 
+            @if($certificate->session)
+            <div class="certificate-meta">
+                Academic Session: <strong>{{ $certificate->session }}</strong>
+            </div>
+            @endif
+
             @if($certificate->cgpa || $certificate->degree_class)
-            <div class="certificate-text-cgpa">
+            <div class="certificate-meta">
                 @if($certificate->cgpa)
-                    The graduate achieved a Cumulative Grade Point Average (CGPA) of
-                    <strong>{{ number_format($certificate->cgpa, 2) }}</strong> on a 4.00 scale
-                    @if($certificate->degree_class)
-                        and was awarded <strong>{{ $certificate->degree_class }}</strong>.
-                    @else
-                        .
-                    @endif
-                @elseif($certificate->degree_class)
-                    The graduate was awarded <strong>{{ $certificate->degree_class }}</strong>.
+                    CGPA: <strong>{{ number_format($certificate->cgpa, 2) }}</strong>/4.00
+                @endif
+                @if($certificate->cgpa && $certificate->degree_class)
+                    &nbsp;|&nbsp;
+                @endif
+                @if($certificate->degree_class)
+                    Class: <strong>{{ $certificate->degree_class }}</strong>
                 @endif
             </div>
             @endif
