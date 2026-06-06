@@ -15,6 +15,7 @@ use App\Models\User;
 use App\Models\Verifier;
 use App\Models\VerificationLog;
 use App\Models\VerifierAccess;
+use App\Notifications\AppNotification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
@@ -96,21 +97,36 @@ class UserController extends Controller
         }
 
         ActivityLog::create([
-            'user_id' => $request->user()->id,
-            'action' => 'user_approved',
+            'user_id'     => $request->user()->id,
+            'action'      => 'user_approved',
             'entity_type' => User::class,
-            'entity_id' => $user->id,
+            'entity_id'   => $user->id,
             'description' => 'User approved by administrator.',
-            'metadata' => [
+            'metadata'    => [
                 'approved_user_email' => $user->email,
-                'role' => $user->role,
+                'role'                => $user->role,
             ],
-            'ip_address' => $request->ip(),
+            'ip_address'  => $request->ip(),
         ]);
+
+        // Notify the approved user
+        try {
+            $user->notify(new AppNotification(
+                'APPROVAL',
+                'Account Approved',
+                'Your account has been approved. You can now access all features of EduAuth Registry.',
+                '/' . $user->role . '/dashboard'
+            ));
+        } catch (\Throwable $throwable) {
+            \Log::error('Failed to send approval notification', [
+                'user_id' => $user->id,
+                'error'   => $throwable->getMessage(),
+            ]);
+        }
 
         return response()->json([
             'message' => 'User approved successfully.',
-            'user' => $user->fresh(['student', 'institution', 'verifier']),
+            'user'    => $user->fresh(['student', 'institution', 'verifier']),
         ]);
     }
 
@@ -360,7 +376,7 @@ class UserController extends Controller
                 'student_id'    => $s->student_id,
                 'phone'         => $s->phone,
                 'address'       => $s->address,
-                'nid_set'       => !empty($s->nid_hash),
+                'nid_status'    => !empty($s->nid_hash) ? 'NID verified (hash only)' : 'Not Set',
             ];
 
             // Enrollment info
@@ -611,6 +627,7 @@ class UserController extends Controller
                 'revoked_at'          => $cert->revoked_at?->toIso8601String(),
                 'revocation_reason'   => $cert->revocation_reason,
                 'revoked_by_name'     => $cert->revokedBy?->name,
+                'revocation_history'  => $cert->revocation_history ?? [],
                 'student'             => $cert->student ? [
                     'id'        => $cert->student->id,
                     'user_id'   => $cert->student->user_id,
