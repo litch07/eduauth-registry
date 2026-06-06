@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\ActivityLog;
+use App\Models\Certificate;
 use App\Models\ProfileChangeRequest;
 use App\Models\User;
 use App\Notifications\AppNotification;
@@ -63,6 +64,17 @@ class ProfileChangeRequestController extends Controller
         $formatted = $this->formatRequestForAdmin($changeRequest);
         $formatted['documents'] = [];
 
+        // For name-change requests of students, include the certificate count
+        $nameFields = ['first_name', 'middle_name', 'last_name'];
+        if (in_array($changeRequest->field_name, $nameFields)
+            && $changeRequest->user?->role === 'student'
+            && $changeRequest->user?->student
+        ) {
+            $formatted['certificate_count'] = Certificate::where('student_id', $changeRequest->user->student->id)
+                ->whereNull('revoked_at')
+                ->count();
+        }
+
         if (!empty($changeRequest->supporting_documents)) {
             foreach ($changeRequest->supporting_documents as $index => $path) {
                 $formatted['documents'][] = [
@@ -120,6 +132,23 @@ class ProfileChangeRequestController extends Controller
                 'description' => "Your profile change request for {$changeRequest->field_name} has been approved.",
                 'ip_address' => $request->ip(),
             ]);
+
+            // If this is a name change for a student, log the certificate impact
+            $nameFields = ['first_name', 'middle_name', 'last_name'];
+            if (in_array($changeRequest->field_name, $nameFields) && $targetUser->role === 'student' && $targetUser->student) {
+                $certCount = Certificate::where('student_id', $targetUser->student->id)
+                    ->whereNull('revoked_at')
+                    ->count();
+
+                if ($certCount > 0) {
+                    ActivityLog::create([
+                        'user_id' => $admin->id,
+                        'action' => 'NAME_CHANGE_CERTIFICATE_IMPACT',
+                        'description' => "Student #{$targetUser->id} has {$certCount} certificate(s) whose displayed name will now reflect the new legal name ('{$changeRequest->requested_value}') on next download.",
+                        'ip_address' => $request->ip(),
+                    ]);
+                }
+            }
 
             // Notify User
             $targetUser->notify(new AppNotification(
@@ -239,7 +268,7 @@ class ProfileChangeRequestController extends Controller
 
     private function formatRequestForAdmin(ProfileChangeRequest $request): array
     {
-        return [
+        $data = [
             'id' => $request->id,
             'user_id' => $request->user_id,
             'user_email' => $request->user?->email,
@@ -258,6 +287,19 @@ class ProfileChangeRequestController extends Controller
             'created_at' => $request->created_at?->toDateTimeString(),
             'updated_at' => $request->updated_at?->toDateTimeString(),
         ];
+
+        // Include certificate count for student name-change requests in list view
+        $nameFields = ['first_name', 'middle_name', 'last_name'];
+        if (in_array($request->field_name, $nameFields)
+            && $request->user?->role === 'student'
+        ) {
+            $studentId = $request->user?->student?->id;
+            $data['certificate_count'] = $studentId
+                ? Certificate::where('student_id', $studentId)->whereNull('revoked_at')->count()
+                : 0;
+        }
+
+        return $data;
     }
 
     private function fieldLabel(string $fieldName): string
