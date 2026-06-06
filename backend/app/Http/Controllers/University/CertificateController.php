@@ -11,6 +11,7 @@ use App\Models\Enrollment;
 use App\Models\Institution;
 use App\Models\Student;
 use App\Models\User;
+use App\Models\UserSetting;
 use App\Notifications\AppNotification;
 use App\Services\BatchCertificateService;
 use App\Services\SerialGeneratorService;
@@ -38,6 +39,7 @@ class CertificateController extends Controller
                     'id' => $cert->id,
                     'serial' => $cert->serial,
                     'student_name' => $cert->student?->user?->name ?? 'N/A',
+                    'issued_name' => $cert->issued_name,
                     'certificate_name' => $cert->certificate_name,
                     'issue_date' => $cert->issue_date,
                     'revoked_at' => $cert->revoked_at,
@@ -56,9 +58,10 @@ class CertificateController extends Controller
         try {
             $validator = Validator::make($request->all(), [
                 'student_id' => ['required', Rule::exists('students', 'id')->whereNull('deleted_at')],
-                'certificate_level' => 'required|in:Bachelor,Master,PhD',
+                'certificate_level' => 'required|in:Bachelor of Science,Bachelor of Commerce,Bachelor of Arts,Master of Business Administration,Master of Science,Doctor of Philosophy',
                 'certificate_name' => 'required|string|max:255',
-                'department' => 'required|string|max:255',
+                'department' => 'required_without:department_id|string|max:255',
+                'department_id' => 'nullable|integer|exists:departments,id',
                 'major' => 'required|string|max:255',
                 'session' => 'required|string|max:100',
                 'cgpa' => 'nullable|numeric|min:0|max:4',
@@ -67,7 +70,7 @@ class CertificateController extends Controller
                 'convocation_date' => 'nullable|date|after_or_equal:issue_date',
                 'authority_name' => 'required|string|max:255',
                 'authority_title' => 'required|string|max:255',
-                'is_publicly_shareable' => 'boolean',
+
             ]);
 
             if ($validator->fails()) {
@@ -110,6 +113,18 @@ class CertificateController extends Controller
             $certificate = DB::transaction(function () use ($request, $institution, $enrollment, $user) {
                 $serial = SerialGeneratorService::generate($request->certificate_level);
 
+                // Capture the student's current legal name at issuance for audit
+                $student = Student::with('user')->find($request->student_id);
+                $issuedName = $student?->full_name ?? $student?->user?->name ?? '';
+
+                $departmentName = $request->department;
+                if ($request->filled('department_id')) {
+                    $department = \App\Models\Department::find($request->department_id);
+                    if ($department && $department->institution_id === $institution->id) {
+                        $departmentName = $department->name;
+                    }
+                }
+
                 $certificate = Certificate::create([
                     'serial' => $serial,
                     'student_id' => $request->student_id,
@@ -118,7 +133,7 @@ class CertificateController extends Controller
                     'issued_by' => $user->id,
                     'certificate_level' => $request->certificate_level,
                     'certificate_name' => $request->certificate_name,
-                    'department' => $request->department,
+                    'department' => $departmentName,
                     'major' => $request->major,
                     'session' => $request->session,
                     'cgpa' => $request->cgpa,
@@ -127,7 +142,8 @@ class CertificateController extends Controller
                     'convocation_date' => $request->convocation_date,
                     'authority_name' => $request->authority_name,
                     'authority_title' => $request->authority_title,
-                    'is_publicly_shareable' => $request->is_publicly_shareable ?? true,
+                    'is_publicly_shareable' => $this->getStudentDefaultVisibility($request->student_id),
+                    'issued_name' => $issuedName,
                 ]);
 
                 ActivityLog::create([
@@ -196,12 +212,57 @@ class CertificateController extends Controller
     }
 
 
+    /**
+     * Return pre-fill data for the certificate form when a student is selected.
+     *
+     * Pulls from the student's active/graduated enrollment under this
+     * institution and from the institution's own default authority settings.
+     */
+    public function prefill(Request $request, int $studentId)
+    {
+        $user = $request->user();
+        $institution = $user->institution;
+
+        $enrollment = Enrollment::where('student_id', $studentId)
+            ->where('institution_id', $institution->id)
+            ->whereIn('status', ['active', 'graduated'])
+            ->first();
+
+        if (!$enrollment) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Student is not enrolled in your institution or enrollment is not active/graduated',
+            ], 404);
+        }
+
+        $student = Student::with('user')->find($studentId);
+
+        return response()->json([
+            'success' => true,
+            'prefill' => [
+                'student_name'    => $student?->full_name ?? $student?->user?->name ?? '',
+                'department'      => $enrollment->program ?? '',
+                'major'           => $enrollment->program ?? '',
+                'academic_session' => $enrollment->batch ?? '',
+                'cgpa'            => null, // Not stored on enrollment; leave blank for manual entry
+                'degree_class'    => null, // Not stored on enrollment; leave blank for manual entry
+                'enrollment_date' => $enrollment->enrollment_date?->toDateString(),
+                'graduation_date' => $enrollment->actual_graduation_date?->toDateString()
+                                     ?? $enrollment->expected_graduation_date?->toDateString(),
+                'certificate_level' => null, // Dynamic — inferred from enrollment context, not hardcoded
+                'default_authority_name'  => $institution->default_authority_name ?? '',
+                'default_authority_title' => $institution->default_authority_title ?? '',
+            ],
+        ]);
+    }
+
     public function batchIssue(Request $request)
     {
         $validator = Validator::make($request->all(), [
             'csv_file' => 'required|file|mimes:csv,txt|max:2048',
             'certificate_name' => 'required|string',
-            'department' => 'required|string',
+            'department' => 'required_without:department_id|string',
+            'department_id' => 'nullable|integer|exists:departments,id',
             'major' => 'required|string',
             'session' => 'required|string',
             'authority_name' => 'required|string',
@@ -229,6 +290,14 @@ class CertificateController extends Controller
             'certificates' => []
         ];
         
+        $departmentName = $request->department;
+        if ($request->filled('department_id')) {
+            $department = \App\Models\Department::find($request->department_id);
+            if ($department && $department->institution_id === $institution->id) {
+                $departmentName = $department->name;
+            }
+        }
+        
         DB::beginTransaction();
         
         try {
@@ -238,7 +307,7 @@ class CertificateController extends Controller
 
                 $rowValidator = Validator::make($data, [
                     'student_email' => 'required|email',
-                    'certificate_level' => 'required|in:Bachelor,Master,PhD',
+                    'certificate_level' => 'required|in:Bachelor of Science,Bachelor of Commerce,Bachelor of Arts,Master of Business Administration,Master of Science,Doctor of Philosophy',
                     'cgpa' => 'nullable|numeric|min:0|max:4',
                     'degree_class' => 'nullable|string',
                     'issue_date' => 'required|date',
@@ -289,7 +358,7 @@ class CertificateController extends Controller
                     'issued_by' => $user->id,
                     'certificate_level' => $data['certificate_level'],
                     'certificate_name' => $request->certificate_name,
-                    'department' => $request->department,
+                    'department' => $departmentName,
                     'major' => $request->major,
                     'session' => $request->session,
                     'cgpa' => $data['cgpa'] ?? null,
@@ -298,11 +367,27 @@ class CertificateController extends Controller
                     'convocation_date' => $data['convocation_date'] ?? null,
                     'authority_name' => $request->authority_name,
                     'authority_title' => $request->authority_title,
-                    'is_publicly_shareable' => true,
+                    'is_publicly_shareable' => $this->getStudentDefaultVisibility($student->id),
+                    'issued_name' => $student->full_name ?? $studentUser->name ?? '',
                 ]);
                 
                 $results['processed']++;
                 $results['certificates'][] = ['serial' => $serial, 'student_name' => $studentUser->name, 'student_email' => $data['student_email']];
+
+                // Notify student
+                try {
+                    $studentUser->notify(new AppNotification(
+                        'CERTIFICATE_ISSUED',
+                        'Certificate Issued',
+                        "Your certificate {$request->certificate_name} has been issued by {$institution->name}.",
+                        '/student/certificates'
+                    ));
+                } catch (\Throwable $e) {
+                    \Log::error('Failed to send batch certificate notification', [
+                        'student_email' => $data['student_email'],
+                        'error'         => $e->getMessage(),
+                    ]);
+                }
 
                 \App\Models\ActivityLog::create([
                     'user_id' => $user->id,
@@ -334,11 +419,39 @@ class CertificateController extends Controller
     public function downloadSampleCSV()
     {
         $csvContent = "student_email,certificate_level,cgpa,degree_class,issue_date,convocation_date\n";
-        $csvContent .= "student@example.com,Bachelor,3.75,First Class,2024-05-15,2024-06-20\n";
-        $csvContent .= "student2@example.com,Master,3.90,First Class,2024-05-15,\n";
+        $csvContent .= "student@example.com,Bachelor of Science,3.75,First Class,2024-05-15,2024-06-20\n";
+        $csvContent .= "student2@example.com,Master of Science,3.90,First Class,2024-05-15,\n";
         
         return response($csvContent, 200)
             ->header('Content-Type', 'text/csv')
             ->header('Content-Disposition', 'attachment; filename="certificate_batch_template.csv"');
+    }
+
+    /**
+     * Resolve the student's default certificate visibility preference.
+     *
+     * Reads certificate_preferences.default_visibility from the student's
+     * UserSetting. Falls back to private when no preference is stored,
+     * aligning with GDPR data-ownership defaults.
+     */
+    private function getStudentDefaultVisibility(int $studentId): bool
+    {
+        $student = Student::find($studentId);
+
+        if (!$student) {
+            return false; // private by default
+        }
+
+        $setting = UserSetting::where('user_id', $student->user_id)->first();
+
+        if (!$setting || !is_array($setting->preferences)) {
+            return false; // private by default
+        }
+
+        $visibility = $setting->preferences['certificate_preferences']['default_visibility']
+            ?? $setting->preferences['privacy']['certificate_default']
+            ?? 'private';
+
+        return $visibility === 'public';
     }
 }
