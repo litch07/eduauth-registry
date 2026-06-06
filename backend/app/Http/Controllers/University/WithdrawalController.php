@@ -284,16 +284,27 @@ class WithdrawalController extends Controller
 
             // Log activity
             \App\Models\ActivityLog::create([
-                'user_id' => $user->id,
-                'action' => 'STUDENT_WITHDRAWN',
+                'user_id'     => $user->id,
+                'action'      => 'STUDENT_WITHDRAWN',
                 'description' => "Withdrew {$enrollment->student->first_name} {$enrollment->student->last_name} from enrollment. Reason: {$request->reason}",
-                'ip_address' => $request->ip(),
+                'ip_address'  => $request->ip(),
             ]);
+
+            // Notify student
+            if ($enrollment->student->user) {
+                $enrollment->student->user->notify(new AppNotification(
+                    'WITHDRAWAL',
+                    'Enrollment Withdrawn',
+                    "Your enrollment at {$institution->name} has been withdrawn by the institution.",
+                    '/student/my-university'
+                ));
+            }
 
             return response()->json([
                 'success' => true,
                 'message' => 'Student withdrawn successfully',
             ], 200);
+
 
         } catch (\Exception $e) {
             return response()->json([
