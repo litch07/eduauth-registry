@@ -62,6 +62,7 @@ class CertificateController extends Controller
                     'issue_date' => $cert->issue_date,
                     'revoked_at' => $cert->revoked_at,
                     'revocation_reason' => $cert->revocation_reason,
+                    'revocation_history' => $cert->revocation_history ?? [],
                 ];
             });
 
@@ -110,6 +111,15 @@ class CertificateController extends Controller
             'revoked_by' => $user->id,
             'revocation_reason' => $request->reason,
         ]);
+
+        // Append audit history entry
+        $certificate->appendRevocationHistory(
+            'revoked',
+            $user->id,
+            $user->role,
+            $request->reason,
+            $user->name
+        );
 
         ActivityLog::create([
             'user_id' => $user->id,
