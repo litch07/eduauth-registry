@@ -38,7 +38,7 @@ export default function StudentAccessRequests() {
   const [selectedAccess, setSelectedAccess] = useState(null);
   const [approveDuration, setApproveDuration] = useState('30');
   const [rejectReason, setRejectReason] = useState('');
-  const { refreshNotifications } = useNotifications();
+  const { refreshCount } = useNotifications();
 
   const fetchData = async () => {
     try {
@@ -87,7 +87,7 @@ export default function StudentAccessRequests() {
       setSelectedRequest(null);
       setRequestModalType('');
       await fetchData();
-      await refreshNotifications();
+      await refreshCount();
     } catch (requestError) {
       toast.error(requestError.response?.data?.message || 'Unable to approve request.');
     } finally {
@@ -110,7 +110,7 @@ export default function StudentAccessRequests() {
       setRequestModalType('');
       setRejectReason('');
       await fetchData();
-      await refreshNotifications();
+      await refreshCount();
     } catch (requestError) {
       toast.error(requestError.response?.data?.message || 'Unable to reject request.');
     } finally {
@@ -129,7 +129,7 @@ export default function StudentAccessRequests() {
       toast.success('Access revoked.');
       setSelectedAccess(null);
       await fetchData();
-      await refreshNotifications();
+      await refreshCount();
     } catch (requestError) {
       toast.error(requestError.response?.data?.message || 'Unable to revoke access.');
     } finally {
