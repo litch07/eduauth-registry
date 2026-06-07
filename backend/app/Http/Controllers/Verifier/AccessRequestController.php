@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Verifier;
 use App\Http\Controllers\Controller;
 use App\Models\CertificateAccessRequest;
 use App\Models\Student;
+use App\Models\UserSetting;
 use App\Models\Verifier;
 use App\Models\VerifierAccess;
 use Illuminate\Http\Request;
@@ -104,6 +105,31 @@ class AccessRequestController extends Controller
         }
     }
 
+    public function cancel(Request $request, $id)
+    {
+        try {
+            $verifier = Verifier::where('user_id', $request->user()->id)->first();
+            $accessRequest = CertificateAccessRequest::where('verifier_id', $verifier->id)
+                ->where('id', $id)
+                ->pending()
+                ->first();
+
+            if (!$accessRequest) {
+                return response()->json(['success' => false, 'message' => 'Pending request not found or cannot be cancelled.'], 404);
+            }
+
+            $accessRequest->delete();
+
+            return response()->json(['success' => true, 'message' => 'Access request cancelled.']);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to cancel access request.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
     public function searchStudents(Request $request)
     {
         $validator = Validator::make($request->all(), [
@@ -114,7 +140,7 @@ class AccessRequestController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Please enter at least 3 characters.',
-                'errors' => $validator->errors()
+                'errors'  => $validator->errors(),
             ], 422);
         }
 
@@ -128,7 +154,7 @@ class AccessRequestController extends Controller
                 if (!filter_var($query, FILTER_VALIDATE_EMAIL)) {
                     return response()->json(['success' => false, 'message' => 'Invalid email format.'], 400);
                 }
-                
+
                 $student = Student::with('user', 'institution')
                     ->whereHas('user', function ($q) use ($query) {
                         $q->where('email', $query)->where('role', 'student');
@@ -149,16 +175,31 @@ class AccessRequestController extends Controller
 
             if (!$student || ($student->user && !$student->user->is_approved)) {
                 return response()->json([
-                    'success' => true, 
+                    'success'  => true,
                     'students' => [],
-                    'message' => 'No student found with this identifier.'
+                    'message'  => 'No student found with this identifier.',
                 ]);
             }
-            
+
+            // ── Check allow_verifier_search preference ──────────────────────────
+            $studentSettings = UserSetting::where('user_id', $student->user_id)->first();
+
+            $allowSearch     = $studentSettings ? ($studentSettings->allow_verifier_search ?? true) : true;
+            $showEmail       = $studentSettings ? ($studentSettings->show_email_to_verifiers ?? false) : false;
+
+            if (!$allowSearch) {
+                // Student has opted out of verifier search — return nothing
+                return response()->json([
+                    'success'  => true,
+                    'students' => [],
+                    'message'  => 'No student found with this identifier.',
+                ]);
+            }
+
             // Check for existing requests to disable button on frontend
             $verifier = Verifier::where('user_id', $request->user()->id)->first();
-            
-            $hasActiveAccess = false;
+
+            $hasActiveAccess   = false;
             $hasPendingRequest = false;
 
             if ($verifier) {
@@ -166,29 +207,106 @@ class AccessRequestController extends Controller
                     ->where('student_id', $student->id)
                     ->active()
                     ->exists();
-                    
+
                 $hasPendingRequest = CertificateAccessRequest::where('verifier_id', $verifier->id)
                     ->where('student_id', $student->id)
                     ->pending()
                     ->exists();
             }
 
+            // ── Build result — conditionally include email ───────────────────────
             $result = [
-                'id' => $student->id,
-                'student_id' => $student->student_id,
-                'name' => $student->full_name ?: $student->user?->name,
-                'email' => $student->user?->email,
-                'institution' => $student->institution ? $student->institution->name : null,
-                'has_active_request' => $hasActiveAccess,
+                'id'                  => $student->id,
+                'student_id'          => $student->student_id,
+                'name'                => $student->full_name ?: $student->user?->name,
+                'institution'         => $student->institution ? $student->institution->name : null,
+                'has_active_request'  => $hasActiveAccess,
                 'has_pending_request' => $hasPendingRequest,
             ];
+
+            // Only include email if the student has opted in
+            if ($showEmail) {
+                $result['email'] = $student->user?->email;
+            }
 
             return response()->json(['success' => true, 'students' => [$result]]);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to search students.',
-                'error' => $e->getMessage(),
+                'error'   => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Return a student's profile for a verifier.
+     * Enforces profile_visibility: private => 403, verifiers_only => allowed,
+     * public => allowed. Admins and the student's own universities bypass this.
+     */
+    public function showStudentProfile(Request $request, $studentId)
+    {
+        try {
+            $student = Student::with('user', 'institution')->find($studentId);
+
+            if (!$student || !$student->user || !$student->user->is_approved) {
+                return response()->json(['success' => false, 'message' => 'Student not found.'], 404);
+            }
+
+            // Load the student's privacy preferences
+            $studentSettings = UserSetting::where('user_id', $student->user_id)->first();
+
+            $profileVisibility = $studentSettings ? ($studentSettings->profile_visibility ?? 'verifiers_only') : 'verifiers_only';
+            $showEmail         = $studentSettings ? ($studentSettings->show_email_to_verifiers ?? false) : false;
+            $showInstitution   = $studentSettings ? ($studentSettings->show_institution_to_public ?? true) : true;
+
+            // Verifiers may not see private profiles
+            if ($profileVisibility === 'private') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This student has set their profile to private. You cannot view their profile details.',
+                ], 403);
+            }
+
+            $verifier = Verifier::where('user_id', $request->user()->id)->first();
+
+            $hasActiveAccess = $verifier
+                ? VerifierAccess::where('verifier_id', $verifier->id)
+                    ->where('student_id', $student->id)
+                    ->active()
+                    ->exists()
+                : false;
+
+            $hasPendingRequest = $verifier
+                ? CertificateAccessRequest::where('verifier_id', $verifier->id)
+                    ->where('student_id', $student->id)
+                    ->pending()
+                    ->exists()
+                : false;
+
+            $profile = [
+                'id'                  => $student->id,
+                'student_id'          => $student->student_id,
+                'name'                => $student->full_name ?: $student->user?->name,
+                'institution'         => $showInstitution && $student->institution
+                    ? $student->institution->name
+                    : null,
+                'has_active_access'   => $hasActiveAccess,
+                'has_pending_request' => $hasPendingRequest,
+                'profile_visibility'  => $profileVisibility,
+            ];
+
+            // Only include email if the student has opted in
+            if ($showEmail) {
+                $profile['email'] = $student->user?->email;
+            }
+
+            return response()->json(['success' => true, 'student' => $profile]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch student profile.',
+                'error'   => $e->getMessage(),
             ], 500);
         }
     }
@@ -199,7 +317,7 @@ class AccessRequestController extends Controller
             $verifier = Verifier::where('user_id', $request->user()->id)->first();
             $accesses = VerifierAccess::with('student.user', 'student.certificates')
                 ->where('verifier_id', $verifier->id)
-                ->active()
+                ->notRevoked()
                 ->get();
 
             return response()->json([
