@@ -19,6 +19,7 @@ const StudentDashboard = React.lazy(() => import('./pages/student/Dashboard'));
 const StudentCertificates = React.lazy(() => import('./pages/student/Certificates'));
 const StudentAccessRequests = React.lazy(() => import('./pages/student/AccessRequests'));
 const MyUniversity = React.lazy(() => import('./pages/student/MyUniversity'));
+const BrowseUniversities = React.lazy(() => import('./pages/student/BrowseUniversities'));
 const UniversityDashboard = React.lazy(() => import('./pages/university/Dashboard'));
 const UniversityCertificates = React.lazy(() => import('./pages/university/Certificates'));
 const Enrollments = React.lazy(() => import('./pages/university/Enrollments'));
@@ -78,6 +79,7 @@ export default function App() {
                     <Route path="/student/certificates" element={<StudentCertificates />} />
                     <Route path="/student/access-requests" element={<StudentAccessRequests />} />
                     <Route path="/student/my-university" element={<MyUniversity />} />
+                    <Route path="/student/universities" element={<BrowseUniversities />} />
                   </Route>
 
                   <Route element={<ProtectedRoute allowedRoles={['university']} />}>
