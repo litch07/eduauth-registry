@@ -29,7 +29,7 @@ export default function VerifierAccessRequests() {
   const [searchTab, setSearchTab] = useState('email');
   const [duration, setDuration] = useState('30');
   const [legitimatePurpose, setLegitimatePurpose] = useState(false);
-  const { refreshNotifications } = useNotifications();
+  const { refreshCount } = useNotifications();
 
   const fetchRequests = async () => {
     try {
@@ -125,7 +125,7 @@ export default function VerifierAccessRequests() {
       setDuration('30');
       setLegitimatePurpose(false);
       await fetchRequests();
-      await refreshNotifications();
+      await refreshCount();
     } catch (requestError) {
       toast.error(requestError.response?.data?.message || 'Unable to send access request.');
     } finally {
