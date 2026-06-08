@@ -56,6 +56,8 @@ class ProfileController extends Controller
                     'phone' => $validated['phone'],
                     'address' => $validated['address'],
                     'website' => $validated['website'] ?? null,
+                    'default_authority_name' => $validated['default_authority_name'] ?? null,
+                    'default_authority_title' => $validated['default_authority_title'] ?? null,
                 ])->save();
             }
 
@@ -174,6 +176,8 @@ class ProfileController extends Controller
                 'phone' => 'required|string|max:30',
                 'address' => 'required|string|max:1000',
                 'website' => 'nullable|url|max:255',
+                'default_authority_name' => 'nullable|string|max:255',
+                'default_authority_title' => 'nullable|string|max:255',
             ],
             'verifier' => [
                 'email' => 'required|email|max:255|unique:users,email,' . $userId,
@@ -209,7 +213,7 @@ class ProfileController extends Controller
                 'middle_name' => $user->student?->middle_name,
                 'last_name' => $user->student?->last_name,
                 'date_of_birth' => $user->student?->date_of_birth?->toDateString(),
-                'nid_hash' => $user->student?->nid_hash ? ('****' . substr($user->student->nid_hash, -6)) : null,
+                'nid_hash' => $user->student?->nid_hash ? 'NID on file (not displayable)' : null,
                 'phone' => $user->student?->phone,
                 'address' => $user->student?->address,
                 'student_id' => $user->student?->student_id,
@@ -225,6 +229,8 @@ class ProfileController extends Controller
                 'registration_number' => $user->institution?->registration_number,
                 'city' => $user->institution?->city,
                 'email' => $user->email,
+                'default_authority_name' => $user->institution?->default_authority_name,
+                'default_authority_title' => $user->institution?->default_authority_title,
             ],
             'verifier' => [
                 'type' => 'verifier',

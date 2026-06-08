@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Bell,
@@ -16,13 +16,13 @@ import { useOutsideClick } from '../../hooks/useOutsideClick';
 import { cn } from '../../utils/helpers';
 
 const TYPE_CONFIG = {
-  ENROLLMENT: { icon: GraduationCap, color: 'text-blue-500', bg: 'bg-blue-100 dark:bg-blue-900/30' },
-  CERTIFICATE_ISSUED: { icon: Award, color: 'text-green-500', bg: 'bg-green-100 dark:bg-green-900/30' },
-  ACCESS_REQUEST: { icon: UserPlus, color: 'text-orange-500', bg: 'bg-orange-100 dark:bg-orange-900/30' },
-  WITHDRAWAL: { icon: UserX, color: 'text-red-500', bg: 'bg-red-100 dark:bg-red-900/30' },
-  APPROVAL: { icon: CheckCircle, color: 'text-emerald-500', bg: 'bg-emerald-100 dark:bg-emerald-900/30' },
-  PROFILE_CHANGE: { icon: Edit, color: 'text-blue-500', bg: 'bg-blue-100 dark:bg-blue-900/30' },
-  INFO: { icon: Bell, color: 'text-gray-500', bg: 'bg-gray-100 dark:bg-gray-800' }
+  ENROLLMENT:        { icon: GraduationCap, color: 'text-blue-500',    bg: 'bg-blue-100 dark:bg-blue-900/30' },
+  CERTIFICATE_ISSUED:{ icon: Award,         color: 'text-green-500',   bg: 'bg-green-100 dark:bg-green-900/30' },
+  ACCESS_REQUEST:    { icon: UserPlus,      color: 'text-orange-500',  bg: 'bg-orange-100 dark:bg-orange-900/30' },
+  WITHDRAWAL:        { icon: UserX,         color: 'text-red-500',     bg: 'bg-red-100 dark:bg-red-900/30' },
+  APPROVAL:          { icon: CheckCircle,   color: 'text-emerald-500', bg: 'bg-emerald-100 dark:bg-emerald-900/30' },
+  PROFILE_CHANGE:    { icon: Edit,          color: 'text-blue-500',    bg: 'bg-blue-100 dark:bg-blue-900/30' },
+  INFO:              { icon: Bell,          color: 'text-gray-500',    bg: 'bg-gray-100 dark:bg-gray-800' },
 };
 
 export default function NotificationDropdown() {
@@ -32,7 +32,9 @@ export default function NotificationDropdown() {
   const dropdownRef = useRef(null);
   const navigate = useNavigate();
 
-  useOutsideClick(dropdownRef, () => setIsOpen(false));
+  // Stabilise the callback so useOutsideClick's effect doesn't re-run every render
+  const closeDropdown = useCallback(() => setIsOpen(false), []);
+  useOutsideClick(dropdownRef, closeDropdown);
 
   const fetchUnreadCount = async () => {
     try {
@@ -59,7 +61,8 @@ export default function NotificationDropdown() {
 
     const startPolling = () => {
       if (!intervalId) {
-        intervalId = setInterval(fetchUnreadCount, 60000); // Poll every 60s
+        // Poll every 30 seconds as required
+        intervalId = setInterval(fetchUnreadCount, 30000);
       }
     };
 
@@ -72,7 +75,7 @@ export default function NotificationDropdown() {
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
-        fetchUnreadCount(); // Fetch immediately on tab reactivation
+        fetchUnreadCount();
         startPolling();
       } else {
         stopPolling();

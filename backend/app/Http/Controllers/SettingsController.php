@@ -24,13 +24,25 @@ class SettingsController extends Controller
         $defaults = UserSetting::getDefaults($user->role);
         $merged = UserSetting::deepMerge($defaults, $setting->preferences ?? []);
 
+        // Clean up legacy keys if they exist in DB JSON
+        if (isset($merged['privacy']['profile_visibility'])) unset($merged['privacy']['profile_visibility']);
+        if (isset($merged['privacy']['show_email_to_verifiers'])) unset($merged['privacy']['show_email_to_verifiers']);
+        if (isset($merged['profile_privacy'])) unset($merged['profile_privacy']);
+
         if ($merged !== ($setting->preferences ?? [])) {
             $setting->update(['preferences' => $merged]);
         }
 
+        // Merge direct columns into the root of the settings response
+        $settingsData = $merged;
+        $settingsData['profile_visibility'] = $setting->profile_visibility ?? 'verifiers_only';
+        $settingsData['allow_verifier_search'] = (bool) ($setting->allow_verifier_search ?? true);
+        $settingsData['show_email_to_verifiers'] = (bool) ($setting->show_email_to_verifiers ?? false);
+        $settingsData['show_institution_to_public'] = (bool) ($setting->show_institution_to_public ?? true);
+
         return response()->json([
             'success' => true,
-            'settings' => $merged,
+            'settings' => $settingsData,
             'role' => $user->role,
             'account' => [
                 'email' => $user->email,
@@ -58,15 +70,57 @@ class SettingsController extends Controller
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
+        $inputSettings = $request->input('settings');
+        
+        $directColumns = [];
+        $columns = ['profile_visibility', 'allow_verifier_search', 'show_email_to_verifiers', 'show_institution_to_public'];
+        
+        foreach ($columns as $col) {
+            if (array_key_exists($col, $inputSettings)) {
+                $directColumns[$col] = $inputSettings[$col];
+                unset($inputSettings[$col]);
+            }
+        }
+        
+        // Remove from nested privacy arrays if sent by accident
+        if (isset($inputSettings['privacy'])) {
+            foreach ($columns as $col) {
+                unset($inputSettings['privacy'][$col]);
+            }
+        }
+        unset($inputSettings['profile_privacy']);
+
         $setting = UserSetting::firstOrCreate(
             ['user_id' => $user->id],
             ['preferences' => UserSetting::getDefaults($user->role)]
         );
 
         $current = $setting->preferences ?? UserSetting::getDefaults($user->role);
-        $updated = UserSetting::deepMerge($current, $request->input('settings'));
+        $updated = UserSetting::deepMerge($current, $inputSettings);
+        
+        // Cleanup existing JSON preferences to prevent duplication
+        if (isset($updated['privacy'])) {
+            foreach ($columns as $col) {
+                unset($updated['privacy'][$col]);
+            }
+        }
+        unset($updated['profile_privacy']);
 
-        $setting->update(['preferences' => $updated]);
+        $updateData = ['preferences' => $updated];
+        if (!empty($directColumns)) {
+            $updateData = array_merge($updateData, $directColumns);
+        }
+
+        $setting->update($updateData);
+
+        $responseData = $updated;
+        foreach ($columns as $col) {
+            $responseData[$col] = $setting->$col ?? (
+                $col === 'profile_visibility' ? 'verifiers_only' :
+                ($col === 'allow_verifier_search' ? true :
+                ($col === 'show_email_to_verifiers' ? false : true))
+            );
+        }
 
         ActivityLog::create([
             'user_id' => $user->id,
@@ -83,7 +137,7 @@ class SettingsController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Settings updated successfully.',
-            'settings' => $updated,
+            'settings' => $responseData,
         ]);
     }
 

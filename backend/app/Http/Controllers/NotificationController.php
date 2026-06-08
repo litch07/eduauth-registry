@@ -11,16 +11,17 @@ class NotificationController extends Controller
     {
         $user = $request->user();
 
-
         $notifications = $user->notifications()
+            ->orderByDesc('created_at')
             ->take(15)
             ->get();
 
         return response()->json([
-            'success' => true,
+            'success'       => true,
             'notifications' => $this->formatNotifications($notifications)
         ]);
     }
+
 
 
     public function all(Request $request)

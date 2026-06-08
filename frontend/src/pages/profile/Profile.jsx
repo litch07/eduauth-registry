@@ -20,7 +20,7 @@ const FIELD_CONFIG = {
       { key: 'middle_name', label: 'Middle Name', fixed: true },
       { key: 'last_name', label: 'Last Name', fixed: true },
       { key: 'date_of_birth', label: 'Date of Birth', fixed: true },
-      { key: 'nid_hash', label: 'NID (Masked)', fixed: true },
+      { key: 'nid_hash', label: 'National ID (Masked)', fixed: true },
       { key: 'student_id', label: 'Student ID', fixed: true },
       { key: 'email', label: 'Email', editable: true },
       { key: 'phone', label: 'Phone', editable: true },
@@ -128,6 +128,10 @@ export default function Profile() {
     config.editableFields.forEach((key) => {
       form[key] = profile?.[key] || '';
     });
+    if (user?.role === 'university') {
+      form.default_authority_name = profile?.default_authority_name || '';
+      form.default_authority_title = profile?.default_authority_title || '';
+    }
     setEditForm(form);
     setEditing(true);
   };
@@ -194,26 +198,54 @@ export default function Profile() {
 
           {/* VIEW MODE */}
           {!editing ? (
-            <div className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2">
-              {config.viewFields.map((field) => (
-                <div key={field.key} className={field.fullWidth ? 'sm:col-span-2' : ''}>
-                  <div className="flex items-center gap-1.5">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                      {field.label}
+            <>
+              <div className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2">
+                {config.viewFields.map((field) => (
+                  <div key={field.key} className={field.fullWidth ? 'sm:col-span-2' : ''}>
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                        {field.label}
+                      </p>
+                      {field.fixed && <Lock className="h-3 w-3 text-gray-400" />}
+                      {field.adminApproval && (
+                        <span className="inline-flex items-center rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+                          Admin
+                        </span>
+                      )}
+                    </div>
+                    <p className="mt-1 text-sm text-gray-900 dark:text-gray-100">
+                      {profile?.[field.key] || <span className="italic text-gray-400">Not assigned</span>}
                     </p>
-                    {field.fixed && <Lock className="h-3 w-3 text-gray-400" />}
-                    {field.adminApproval && (
-                      <span className="inline-flex items-center rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
-                        Admin
-                      </span>
-                    )}
                   </div>
-                  <p className="mt-1 text-sm text-gray-900 dark:text-gray-100">
-                    {profile?.[field.key] || <span className="italic text-gray-400">Not assigned</span>}
-                  </p>
+                ))}
+              </div>
+
+              {user?.role === 'university' && (
+                <div className="mt-6 border-t border-gray-100 pt-6 dark:border-gray-800">
+                  <h3 className="mb-4 text-xs font-semibold uppercase tracking-[0.1em] text-gray-500 dark:text-gray-400">
+                    Default Certificate Authority
+                  </h3>
+                  <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                        Default Authority Name
+                      </p>
+                      <p className="mt-1 text-sm text-gray-900 dark:text-gray-100">
+                        {profile?.default_authority_name || <span className="italic text-gray-400">Not assigned</span>}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                        Default Authority Title
+                      </p>
+                      <p className="mt-1 text-sm text-gray-900 dark:text-gray-100">
+                        {profile?.default_authority_title || <span className="italic text-gray-400">Not assigned</span>}
+                      </p>
+                    </div>
+                  </div>
                 </div>
-              ))}
-            </div>
+              )}
+            </>
           ) : (
             /* EDIT MODE */
             <div className="mt-6 space-y-6">
@@ -249,6 +281,28 @@ export default function Profile() {
                   })}
                 </div>
               </div>
+
+              {user?.role === 'university' && (
+                <div>
+                  <h3 className="mb-3 text-xs font-semibold uppercase tracking-[0.1em] text-blue-600 dark:text-blue-400">
+                    Default Certificate Authority
+                  </h3>
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <Input
+                      label="Default Authority Name"
+                      value={editForm.default_authority_name || ''}
+                      onChange={(e) => setEditForm((prev) => ({ ...prev, default_authority_name: e.target.value }))}
+                      placeholder="e.g., Prof. Dr. John Smith"
+                    />
+                    <Input
+                      label="Default Authority Title"
+                      value={editForm.default_authority_title || ''}
+                      onChange={(e) => setEditForm((prev) => ({ ...prev, default_authority_title: e.target.value }))}
+                      placeholder="e.g., Vice Chancellor"
+                    />
+                  </div>
+                </div>
+              )}
 
               {/* Section B: Admin Approval */}
               {config.approvableFields.length > 0 && (
