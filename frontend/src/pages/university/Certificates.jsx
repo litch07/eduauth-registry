@@ -84,6 +84,11 @@ export default function UniversityCertificates() {
                     <p className="font-semibold text-gray-900 dark:text-white">{certificate.certificate_name}</p>
                     <p className="text-sm text-gray-500 dark:text-gray-400">Serial: {certificate.serial}</p>
                     <p className="text-sm text-gray-500 dark:text-gray-400">Student: {certificate.student_name}</p>
+                    {certificate.issued_name && (
+                      <p className="mt-1 text-xs text-gray-400 dark:text-gray-500 italic">
+                        Original Issued Name (Legal Record): {certificate.issued_name}
+                      </p>
+                    )}
                   </div>
                   {certificate.revoked_at ? (
                     <Badge variant="danger">REVOKED</Badge>

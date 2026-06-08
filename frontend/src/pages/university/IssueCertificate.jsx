@@ -13,12 +13,36 @@ import Button from '../../components/shared/Button';
 import LoadingSpinner from '../../components/shared/LoadingSpinner';
 import api from '../../services/api';
 import toast from 'react-hot-toast';
+import SelectField from '../../components/shared/SelectField';
+
+const DEGREE_OPTIONS = [
+  { value: 'Bachelor of Science', label: 'Bachelor of Science' },
+  { value: 'Bachelor of Commerce', label: 'Bachelor of Commerce' },
+  { value: 'Bachelor of Arts', label: 'Bachelor of Arts' },
+  { value: 'Master of Business Administration', label: 'Master of Business Administration' },
+  { value: 'Master of Science', label: 'Master of Science' },
+  { value: 'Doctor of Philosophy', label: 'Doctor of Philosophy' },
+];
+
+const PREFIX_MAP = {
+  'Bachelor of Science': 'BSc',
+  'Bachelor of Commerce': 'BCom',
+  'Bachelor of Arts': 'BA',
+  'Master of Business Administration': 'MBA',
+  'Master of Science': 'MSc',
+  'Doctor of Philosophy': 'PhD',
+};
 
 const certificateSchema = yup.object().shape({
   student_id: yup.string().required('Please select a student'),
   certificate_level: yup.string().required('Certificate level is required'),
   certificate_name: yup.string().required('Certificate name is required'),
-  department: yup.string().required('Department is required'),
+  department_id: yup.string().nullable(),
+  department: yup.string().when('department_id', {
+    is: (val) => !val || val === '',
+    then: () => yup.string().required('Department is required'),
+    otherwise: () => yup.string().nullable()
+  }),
   major: yup.string().nullable(),
   session: yup.string().required('Session is required'),
   cgpa: yup.number()
@@ -33,7 +57,7 @@ const certificateSchema = yup.object().shape({
     .nullable()
     .typeError('Please enter a valid date')
     .min(yup.ref('issue_date'), 'Convocation date must be after issue date'),
-  is_publicly_shareable: yup.string().required(),
+
   authority_name: yup.string().required('Authority name is required'),
   authority_title: yup.string().required('Authority title is required'),
 });
@@ -46,6 +70,14 @@ function SingleCertificateForm() {
   const [serverError, setServerError] = useState('');
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [studentOptions, setStudentOptions] = useState([]);
+  const [prefillLoading, setPrefillLoading] = useState(false);
+  const [departments, setDepartments] = useState([]);
+
+  useEffect(() => {
+    api.get('/university/departments').then(({ data }) => {
+      setDepartments(data.departments?.filter(d => d.is_active) || []);
+    }).catch(console.error);
+  }, []);
 
   const {
     register,
@@ -54,13 +86,54 @@ function SingleCertificateForm() {
     formState: { errors, isSubmitting },
     setError,
     setValue,
+    watch,
   } = useForm({
     resolver: yupResolver(certificateSchema),
     defaultValues: {
-      certificate_level: 'Bachelor',
-      is_publicly_shareable: '1',
+      certificate_level: 'Bachelor of Science',
     },
   });
+
+  const certificateLevel = watch('certificate_level');
+  const currentPrefix = PREFIX_MAP[certificateLevel] || 'CRT';
+  const currentYear = new Date().getFullYear().toString().slice(-2);
+
+  /**
+   * Fetch pre-fill data from the backend for the selected student.
+   * Populates department, major, session, CGPA, degree class, and
+   * the university's default authority name/title.
+   */
+  const fetchPrefill = useCallback(async (studentId) => {
+    setPrefillLoading(true);
+    try {
+      const { data } = await api.get(`/university/certificates/prefill/${studentId}`);
+      if (data.success && data.prefill) {
+        const p = data.prefill;
+        if (p.department) {
+          // See if it matches a known department exactly
+          const matched = departments.find(d => d.name === p.department);
+          if (matched) {
+            setValue('department_id', matched.id.toString());
+            setValue('department', '');
+          } else {
+            setValue('department', p.department);
+            setValue('department_id', '');
+          }
+        }
+        if (p.major) setValue('major', p.major);
+        if (p.academic_session) setValue('session', p.academic_session);
+        if (p.cgpa != null) setValue('cgpa', p.cgpa);
+        if (p.degree_class) setValue('degree_class', p.degree_class);
+        if (p.default_authority_name) setValue('authority_name', p.default_authority_name);
+        if (p.default_authority_title) setValue('authority_title', p.default_authority_title);
+      }
+    } catch (error) {
+      console.error('Prefill failed:', error);
+      // Non-blocking — the user can still fill manually
+    } finally {
+      setPrefillLoading(false);
+    }
+  }, [setValue, departments]);
 
   useEffect(() => {
     if (preSelectedStudent && !selectedStudent) {
@@ -72,15 +145,9 @@ function SingleCertificateForm() {
       setStudentOptions([formattedOption]);
       setSelectedStudent(formattedOption);
       setValue('student_id', preSelectedStudent.id);
-      
-      if (preSelectedStudent.program) {
-        setValue('department', preSelectedStudent.program);
-      }
-      if (preSelectedStudent.batch) {
-        setValue('session', preSelectedStudent.batch);
-      }
+      fetchPrefill(preSelectedStudent.id);
     }
-  }, [preSelectedStudent, setValue, selectedStudent]);
+  }, [preSelectedStudent, setValue, selectedStudent, fetchPrefill]);
 
   const searchStudents = useCallback(
     debounce(async (inputValue) => {
@@ -110,23 +177,23 @@ function SingleCertificateForm() {
   );
 
   useEffect(() => {
-    // When selectedStudent changes, update the form values
     if (selectedStudent) {
       setValue('student_id', selectedStudent.value);
-      if (selectedStudent.student?.program) {
-        setValue('department', selectedStudent.student.program);
-      }
-      if (selectedStudent.student?.batch) {
-        setValue('session', selectedStudent.student.batch);
-      }
+      fetchPrefill(selectedStudent.value);
     } else {
       setValue('student_id', '');
       if (!preSelectedStudent) {
+        setValue('department_id', '');
         setValue('department', '');
+        setValue('major', '');
         setValue('session', '');
+        setValue('cgpa', '');
+        setValue('degree_class', '');
+        setValue('authority_name', '');
+        setValue('authority_title', '');
       }
     }
-  }, [selectedStudent, setValue, preSelectedStudent]);
+  }, [selectedStudent, setValue, preSelectedStudent, fetchPrefill]);
 
   const onSubmit = async (data) => {
     setSuccess('');
@@ -135,8 +202,8 @@ function SingleCertificateForm() {
       const payload = {
         ...data,
         student_id: Number(data.student_id),
+        department_id: data.department_id ? Number(data.department_id) : null,
         cgpa: data.cgpa ? Number(data.cgpa) : null,
-        is_publicly_shareable: data.is_publicly_shareable === '1',
       };
       await api.post('/university/certificates', payload);
       setSuccess('Certificate issued successfully.');
@@ -221,24 +288,55 @@ function SingleCertificateForm() {
               <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">
                 Program: {selectedStudent.student.program} • Batch: {selectedStudent.student.batch}
               </p>
+              {prefillLoading && (
+                <p className="text-xs text-primary-600 dark:text-primary-400 mt-2 animate-pulse">
+                  Loading enrollment data…
+                </p>
+              )}
             </div>
           )}
 
           <div className="grid gap-4 md:grid-cols-2">
             <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Certificate Level</label>
-              <select className="input-field" {...register('certificate_level')}>
-                <option value="Bachelor">Bachelor</option>
-                <option value="Master">Master</option>
-                <option value="PhD">PhD</option>
-              </select>
+              <SelectField
+                label="Certificate Level / Degree Type"
+                options={DEGREE_OPTIONS}
+                value={certificateLevel}
+                onChange={(val) => setValue('certificate_level', val)}
+              />
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                Serial will be generated as: {currentPrefix}-{currentYear}-XXXXXX
+              </p>
             </div>
-            <Input label="Certificate Name" {...register('certificate_name')} error={errors.certificate_name?.message} />
+            <Input label="Certificate Name" placeholder="e.g. Bachelor of Science in CSE" {...register('certificate_name')} error={errors.certificate_name?.message} />
           </div>
           <div className="grid gap-4 md:grid-cols-2">
-            <Input label="Department" {...register('department')} error={errors.department?.message} />
-            <Input label="Major" {...register('major')} error={errors.major?.message} />
-            <Input label="Session" {...register('session')} error={errors.session?.message} />
+            <div className="space-y-1">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Department / Faculty
+              </label>
+              <select
+                {...register('department_id')}
+                onChange={(e) => {
+                  setValue('department_id', e.target.value);
+                  if (e.target.value) setValue('department', '');
+                }}
+                className="block w-full rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:focus:border-primary-400 dark:focus:ring-primary-400"
+              >
+                <option value="">Select Department (or enter below)</option>
+                {departments.map(dept => (
+                  <option key={dept.id} value={dept.id}>{dept.name}</option>
+                ))}
+              </select>
+              <Input
+                placeholder="Or type custom department manually..."
+                {...register('department')}
+                error={errors.department?.message || errors.department_id?.message}
+                disabled={!!watch('department_id')}
+              />
+            </div>
+            <Input label="Major / Discipline" {...register('major')} error={errors.major?.message} />
+            <Input label="Academic Session" {...register('session')} error={errors.session?.message} />
           </div>
           <div className="grid gap-4 md:grid-cols-3">
             <Input label="CGPA" type="number" step="0.01" {...register('cgpa')} error={errors.cgpa?.message} />
@@ -247,13 +345,6 @@ function SingleCertificateForm() {
           </div>
           <div className="grid gap-4 md:grid-cols-2">
             <Input type="date" label="Convocation Date" {...register('convocation_date')} error={errors.convocation_date?.message} />
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Shareability</label>
-              <select className="input-field" {...register('is_publicly_shareable')}>
-                <option value="1">Publicly shareable</option>
-                <option value="0">Private</option>
-              </select>
-            </div>
           </div>
           <div className="grid gap-4 md:grid-cols-2">
             <Input label="Authority Name" {...register('authority_name')} error={errors.authority_name?.message} />
@@ -269,6 +360,7 @@ function BatchUploadForm() {
   const [file, setFile] = useState(null);
   const [templateData, setTemplateData] = useState({
     certificate_name: '',
+    department_id: '',
     department: '',
     major: '',
     session: '',
@@ -277,6 +369,13 @@ function BatchUploadForm() {
   });
   const [uploading, setUploading] = useState(false);
   const [results, setResults] = useState(null);
+  const [departments, setDepartments] = useState([]);
+
+  useEffect(() => {
+    api.get('/university/departments').then(({ data }) => {
+      setDepartments(data.departments?.filter(d => d.is_active) || []);
+    }).catch(console.error);
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -338,9 +437,30 @@ function BatchUploadForm() {
       <Card>
         <h3 className="font-semibold mb-4 text-gray-900 dark:text-white">Step 2: Fill Common Certificate Data</h3>
         <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-4 md:grid-cols-2 items-start">
             <Input label="Certificate Name" required value={templateData.certificate_name} onChange={(e) => setTemplateData({...templateData, certificate_name: e.target.value})} />
-            <Input label="Department" required value={templateData.department} onChange={(e) => setTemplateData({...templateData, department: e.target.value})} />
+            <div className="space-y-1">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Department
+              </label>
+              <select
+                value={templateData.department_id || ''}
+                onChange={(e) => setTemplateData({...templateData, department_id: e.target.value, department: e.target.value ? '' : templateData.department})}
+                className="block w-full rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:focus:border-primary-400 dark:focus:ring-primary-400"
+              >
+                <option value="">Select Department (or enter below)</option>
+                {departments.map(dept => (
+                  <option key={dept.id} value={dept.id}>{dept.name}</option>
+                ))}
+              </select>
+              <Input
+                placeholder="Or type custom department manually..."
+                value={templateData.department || ''}
+                onChange={(e) => setTemplateData({...templateData, department: e.target.value})}
+                disabled={!!templateData.department_id}
+                required={!templateData.department_id}
+              />
+            </div>
             <Input label="Major" required value={templateData.major} onChange={(e) => setTemplateData({...templateData, major: e.target.value})} />
             <Input label="Session" required value={templateData.session} onChange={(e) => setTemplateData({...templateData, session: e.target.value})} />
             <Input label="Authority Name" required value={templateData.authority_name} onChange={(e) => setTemplateData({...templateData, authority_name: e.target.value})} />
