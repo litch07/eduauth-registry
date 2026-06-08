@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { AlertCircle, GraduationCap, Search, UserCheck, UserPlus, Users, RefreshCw, Calendar, Clock, LogOut, MessageSquare } from 'lucide-react';
+import { AlertCircle, GraduationCap, Search, UserCheck, UserPlus, Users, RefreshCw, Calendar, Clock, LogOut, MessageSquare, Pencil, BookOpen, ChevronDown, ChevronUp, CalendarPlus, Check, XCircle, ArrowRightLeft, FileText, Info, Send } from 'lucide-react';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import Card from '../../components/shared/Card';
 import StatCard from '../../components/shared/StatCard';
@@ -43,7 +43,7 @@ function getEnrollmentSummary(enrollment) {
 export default function Enrollments() {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
-  const activeTab = searchParams.get('tab') || 'enrollments';
+  const activeTab = searchParams.get('view') === 'programs' ? 'programs' : (searchParams.get('tab') || 'enrollments');
 
   const [enrollments, setEnrollments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -51,6 +51,7 @@ export default function Enrollments() {
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
+
 
   // Sync filter state from URL parameter if it exists
   useEffect(() => {
@@ -73,7 +74,10 @@ export default function Enrollments() {
   const [showEnrollModal, setShowEnrollModal] = useState(false);
   const [extendingEnrollment, setExtendingEnrollment] = useState(null);
   const [suspendingEnrollment, setSuspendingEnrollment] = useState(null);
+  const [editingEnrollment, setEditingEnrollment] = useState(null);
   const [pendingWithdrawals, setPendingWithdrawals] = useState(0);
+  const [pendingExtensions, setPendingExtensions] = useState(0);
+  const [pendingApplications, setPendingApplications] = useState(0);
 
   useEffect(() => {
     const fetchCount = async () => {
@@ -82,12 +86,36 @@ export default function Enrollments() {
         setPendingWithdrawals(data.requests?.length || 0);
       } catch (e) {}
     };
+
+    const fetchExtensionCount = async () => {
+      try {
+        const { data } = await api.get('/university/extension-requests');
+        const pending = (data.requests || []).filter(r => r.status === 'pending' || r.status === 'counter_offered').length;
+        setPendingExtensions(pending);
+      } catch (e) {}
+    };
+
+    const fetchApplicationCount = async () => {
+      try {
+        const { data } = await api.get('/university/enrollment-applications');
+        const pending = (data.applications || []).filter(a => a.status === 'pending' || a.status === 'more_info_requested').length;
+        setPendingApplications(pending);
+      } catch (e) {}
+    };
     
     fetchCount();
+    fetchExtensionCount();
+    fetchApplicationCount();
 
-    const handleUpdate = () => fetchCount();
+    const handleUpdate = () => { fetchCount(); fetchExtensionCount(); fetchApplicationCount(); };
     window.addEventListener('withdrawal_requests_updated', handleUpdate);
-    return () => window.removeEventListener('withdrawal_requests_updated', handleUpdate);
+    window.addEventListener('extension_requests_updated', handleUpdate);
+    window.addEventListener('enrollment_applications_updated', handleUpdate);
+    return () => {
+      window.removeEventListener('withdrawal_requests_updated', handleUpdate);
+      window.removeEventListener('extension_requests_updated', handleUpdate);
+      window.removeEventListener('enrollment_applications_updated', handleUpdate);
+    };
   }, []);
 
   const [confirmModal, setConfirmModal] = useState({ isOpen: false, enrollmentId: null, newStatus: '' });
@@ -192,6 +220,16 @@ export default function Enrollments() {
               All Enrollments
             </button>
             <button
+              onClick={() => setSearchParams({ tab: 'programs' })}
+              className={`whitespace-nowrap border-b-2 py-4 px-1 text-sm font-medium transition-colors ${
+                activeTab === 'programs'
+                  ? 'border-primary-500 text-primary-600 dark:text-primary-400'
+                  : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
+              }`}
+            >
+              By Program
+            </button>
+            <button
               onClick={() => setSearchParams({ tab: 'withdrawals' })}
               className={`whitespace-nowrap flex items-center gap-2 border-b-2 py-4 px-1 text-sm font-medium transition-colors ${
                 activeTab === 'withdrawals'
@@ -201,8 +239,38 @@ export default function Enrollments() {
             >
               Withdrawal Requests
               {pendingWithdrawals > 0 && (
-                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-red-100 text-xs font-medium text-red-600 dark:bg-red-900/30 dark:text-red-400">
+                <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-red-100 px-1 text-xs font-medium text-red-600 dark:bg-red-900/30 dark:text-red-400">
                   {pendingWithdrawals}
+                </span>
+              )}
+            </button>
+            <button
+              onClick={() => setSearchParams({ tab: 'extensions' })}
+              className={`whitespace-nowrap flex items-center gap-2 border-b-2 py-4 px-1 text-sm font-medium transition-colors ${
+                activeTab === 'extensions'
+                  ? 'border-primary-500 text-primary-600 dark:text-primary-400'
+                  : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
+              }`}
+            >
+              Extension Requests
+              {pendingExtensions > 0 && (
+                <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-blue-100 px-1 text-xs font-medium text-blue-600 dark:bg-blue-900/30 dark:text-blue-400">
+                  {pendingExtensions}
+                </span>
+              )}
+            </button>
+            <button
+              onClick={() => setSearchParams({ tab: 'applications' })}
+              className={`whitespace-nowrap flex items-center gap-2 border-b-2 py-4 px-1 text-sm font-medium transition-colors ${
+                activeTab === 'applications'
+                  ? 'border-primary-500 text-primary-600 dark:text-primary-400'
+                  : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
+              }`}
+            >
+              Applications
+              {pendingApplications > 0 && (
+                <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-green-100 px-1 text-xs font-medium text-green-600 dark:bg-green-900/30 dark:text-green-400">
+                  {pendingApplications}
                 </span>
               )}
             </button>
@@ -329,6 +397,16 @@ export default function Enrollments() {
                 </div>
 
                 <div className="flex flex-wrap gap-3 border-t border-gray-200 pt-4 dark:border-gray-700">
+                  <Button 
+                    variant="secondary" 
+                    type="button" 
+                    onClick={() => setEditingEnrollment(enrollment)}
+                    disabled={['graduated', 'withdrawn'].includes(enrollment.status)}
+                    title={['graduated', 'withdrawn'].includes(enrollment.status) ? "Cannot edit graduated or withdrawn enrollments" : ""}
+                  >
+                    <Pencil className="mr-2 h-4 w-4" />
+                    Edit
+                  </Button>
                   {enrollment.status === 'active' ? (
                     <>
                       <Button variant="success" type="button" onClick={() => requestUpdateStatus(enrollment.id, 'graduated')}>
@@ -397,7 +475,13 @@ export default function Enrollments() {
           </>
         )}
 
+        {activeTab === 'programs' && <ProgramsTab />}
+
         {activeTab === 'withdrawals' && <WithdrawalRequestsTab />}
+
+        {activeTab === 'extensions' && <ExtensionRequestsTab />}
+
+        {activeTab === 'applications' && <ApplicationsTab />}
 
         {showEnrollModal ? (
           <EnrollStudentModal
@@ -418,6 +502,17 @@ export default function Enrollments() {
             onClose={() => setExtendingEnrollment(null)}
             onSuccess={() => {
               setExtendingEnrollment(null);
+              fetchEnrollments();
+            }}
+          />
+        ) : null}
+
+        {editingEnrollment ? (
+          <EditEnrollmentModal
+            enrollment={editingEnrollment}
+            onClose={() => setEditingEnrollment(null)}
+            onSuccess={() => {
+              setEditingEnrollment(null);
               fetchEnrollments();
             }}
           />
@@ -460,11 +555,18 @@ function EnrollStudentModal({ open, onClose, onSuccess }) {
     student_email: '',
     student_id: '',
     program_level: '',
-    department: '',
+    department_id: '',
     batch: '',
     enrollment_date: new Date().toISOString().split('T')[0],
     expected_graduation_date: '',
   });
+
+  const [departments, setDepartments] = useState([]);
+  useEffect(() => {
+    api.get('/university/departments').then(({ data }) => {
+      setDepartments(data.departments?.filter(d => d.is_active) || []);
+    }).catch(console.error);
+  }, []);
 
   const calculateGraduationDate = (level, enrollDateStr) => {
     if (!level || !enrollDateStr) return '';
@@ -543,8 +645,10 @@ function EnrollStudentModal({ open, onClose, onSuccess }) {
     try {
       const payload = {
         ...formData,
-        program: formData.department ? `${formData.program_level} in ${formData.department}` : formData.program_level,
       };
+      if (formData.department_id) {
+        payload.department_id = Number(formData.department_id);
+      }
       await api.post('/university/enrollments', payload);
       toast.success('Student enrolled successfully');
       onSuccess();
@@ -690,14 +794,31 @@ function EnrollStudentModal({ open, onClose, onSuccess }) {
                 <option value="PhD">PhD</option>
               </select>
             </div>
-            <Input
-              label="Department"
-              type="text"
-              placeholder="e.g. Computer Science"
-              value={formData.department}
-              onChange={(event) => setFormData((current) => ({ ...current, department: event.target.value }))}
-              required
-            />
+            <div className="space-y-1">
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Department
+                </label>
+                <a
+                  href="/settings?tab=role_prefs"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300"
+                >
+                  Manage Departments
+                </a>
+              </div>
+              <select
+                value={formData.department_id}
+                onChange={(e) => setFormData((current) => ({ ...current, department_id: e.target.value }))}
+                className="block w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:focus:border-primary-400 dark:focus:ring-primary-400"
+              >
+                <option value="">Select Department (Optional)</option>
+                {departments.map(dept => (
+                  <option key={dept.id} value={dept.id}>{dept.name}</option>
+                ))}
+              </select>
+            </div>
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
@@ -957,6 +1078,81 @@ function ExtendGraduationModal({ enrollment, onClose, onSuccess }) {
     );
   }
 
+function EditEnrollmentModal({ enrollment, onClose, onSuccess }) {
+  const [formData, setFormData] = useState({
+    program: enrollment.program || '',
+    batch: enrollment.batch || '',
+    expected_graduation_date: enrollment.expected_graduation ? enrollment.expected_graduation.split('T')[0] : '',
+  });
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setSubmitting(true);
+    setError('');
+
+    try {
+      const response = await api.patch(`/university/enrollments/${enrollment.id}`, formData);
+      toast.success(response.data.message || 'Enrollment updated successfully');
+      onSuccess();
+    } catch (err) {
+      const errorMsg = err.response?.data?.message || 'Failed to update enrollment';
+      setError(errorMsg);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Modal open={true} onClose={onClose} title="Edit Enrollment">
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="rounded-2xl bg-gray-50 p-4 dark:bg-gray-800/50">
+          <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">Reference Information</p>
+          <p className="mt-1 font-medium text-gray-900 dark:text-white">{getFullName(enrollment)}</p>
+          <p className="text-sm text-gray-600 dark:text-gray-400">Enrollment #: {enrollment.enrollment_number}</p>
+        </div>
+
+        {error && (
+          <div className="rounded-2xl border border-red-200 bg-red-50 p-3 dark:border-red-900/30 dark:bg-red-900/20">
+            <p className="text-sm text-red-700 dark:text-red-300">{error}</p>
+          </div>
+        )}
+
+        <Input
+          label="Program"
+          type="text"
+          value={formData.program}
+          onChange={(e) => setFormData({ ...formData, program: e.target.value })}
+        />
+        
+        <Input
+          label="Batch"
+          type="text"
+          value={formData.batch}
+          onChange={(e) => setFormData({ ...formData, batch: e.target.value })}
+        />
+
+        <Input
+          label="Expected Graduation Date"
+          type="date"
+          value={formData.expected_graduation_date}
+          onChange={(e) => setFormData({ ...formData, expected_graduation_date: e.target.value })}
+        />
+
+        <div className="flex gap-3">
+          <Button type="button" variant="secondary" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" loading={submitting} className="flex-1">
+            Save Changes
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
 function WithdrawalRequestsTab() {
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1161,5 +1357,1047 @@ function WithdrawalRequestCard({ request, onApprove, onReject }) {
         </div>
       </div>
     </Card>
+  );
+}
+
+function ProgramsTab() {
+  const [programs, setPrograms] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [expandedProgram, setExpandedProgram] = useState(null);
+
+  const fetchPrograms = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const { data } = await api.get('/university/enrollments/programs');
+      setPrograms(data.programs || []);
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to fetch programs');
+      toast.error('Failed to fetch programs');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchPrograms();
+  }, [fetchPrograms]);
+
+  if (loading) {
+    return (
+      <Card>
+        <div className="flex min-h-64 items-center justify-center">
+          <LoadingSpinner />
+        </div>
+      </Card>
+    );
+  }
+
+  if (error) {
+    return <ErrorMessage message={error} retry={fetchPrograms} />;
+  }
+
+  if (programs.length === 0) {
+    return (
+      <EmptyState
+        title="No active programs"
+        message="You haven't set any program names for your enrollments. When you enroll students and provide a program name, it will appear here."
+        icon={BookOpen}
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {programs.map((program) => (
+        <Card key={program.name} className="border border-transparent transition hover:border-primary-200 hover:shadow-xl dark:hover:border-primary-900/40">
+          <div 
+            className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between cursor-pointer"
+            onClick={() => setExpandedProgram(expandedProgram === program.name ? null : program.name)}
+          >
+            <div>
+              <h3 className="text-xl font-bold text-gray-900 dark:text-white">{program.name}</h3>
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                Most recent enrollment: {program.recent_enrollment_date ? new Date(program.recent_enrollment_date).toLocaleDateString() : 'N/A'}
+              </p>
+            </div>
+            
+            <div className="flex flex-wrap items-center gap-3">
+              <Badge variant="success">Active: {program.active_count}</Badge>
+              <Badge variant="primary">Graduated: {program.graduated_count}</Badge>
+              <Badge variant="danger">Withdrawn: {program.withdrawn_count}</Badge>
+              <div className="ml-2 text-gray-400">
+                {expandedProgram === program.name ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+              </div>
+            </div>
+          </div>
+          
+          {expandedProgram === program.name && (
+            <div className="mt-6 border-t border-gray-200 pt-6 dark:border-gray-700">
+              <h4 className="mb-4 text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                Enrolled Students
+              </h4>
+              
+              {program.students && program.students.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm text-gray-600 dark:text-gray-400">
+                    <thead className="bg-gray-50 text-xs uppercase text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+                      <tr>
+                        <th className="px-4 py-3 font-medium">Name</th>
+                        <th className="px-4 py-3 font-medium">Student ID</th>
+                        <th className="px-4 py-3 font-medium">Batch</th>
+                        <th className="px-4 py-3 font-medium">Enrolled Date</th>
+                        <th className="px-4 py-3 font-medium">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                      {program.students.map((student) => (
+                        <tr key={student.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                          <td className="whitespace-nowrap px-4 py-3 font-medium text-gray-900 dark:text-white">
+                            {student.student_name}
+                          </td>
+                          <td className="whitespace-nowrap px-4 py-3">{student.student_id || 'N/A'}</td>
+                          <td className="whitespace-nowrap px-4 py-3">{student.batch || 'N/A'}</td>
+                          <td className="whitespace-nowrap px-4 py-3">{new Date(student.enrollment_date).toLocaleDateString()}</td>
+                          <td className="whitespace-nowrap px-4 py-3">
+                            <Badge variant={statusVariants[student.status] || 'default'}>
+                              {String(student.status || 'unknown').toUpperCase()}
+                            </Badge>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="text-sm text-gray-500">No students found in this program.</p>
+              )}
+            </div>
+          )}
+        </Card>
+      ))}
+    </div>
+  );
+}
+
+// ─── Extension Requests Tab ──────────────────────────────
+function ExtensionRequestsTab() {
+  const [requests, setRequests] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [counterOfferRequest, setCounterOfferRequest] = useState(null);
+
+  const fetchRequests = useCallback(async () => {
+    setLoading(true);
+    setError('');
+
+    try {
+      const { data } = await api.get('/university/extension-requests');
+      setRequests(data.requests || []);
+    } catch (requestError) {
+      setError(requestError.response?.data?.message || 'Failed to fetch extension requests');
+      toast.error('Failed to fetch extension requests');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchRequests();
+  }, [fetchRequests]);
+
+  const handleApprove = async (requestId) => {
+    try {
+      await api.post(`/university/extension-requests/${requestId}/approve`);
+      toast.success('Extension request approved');
+      window.dispatchEvent(new Event('extension_requests_updated'));
+      fetchRequests();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to approve extension');
+    }
+  };
+
+  const handleReject = async (requestId, universityResponse) => {
+    if (!universityResponse || universityResponse.length < 10) {
+      toast.error('Please provide a rejection reason (min 10 characters)');
+      return;
+    }
+    try {
+      await api.post(`/university/extension-requests/${requestId}/reject`, {
+        university_response: universityResponse,
+      });
+      toast.success('Extension request rejected');
+      window.dispatchEvent(new Event('extension_requests_updated'));
+      fetchRequests();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to reject extension');
+    }
+  };
+
+  const handleCounterOffer = async (requestId, counterDate, message) => {
+    try {
+      await api.post(`/university/extension-requests/${requestId}/counter-offer`, {
+        counter_offered_date: counterDate,
+        university_response: message,
+      });
+      toast.success('Counter offer sent to student');
+      window.dispatchEvent(new Event('extension_requests_updated'));
+      setCounterOfferRequest(null);
+      fetchRequests();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to send counter offer');
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <Card className="space-y-4">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Extension Requests</h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Review student requests for graduation date extensions.</p>
+          </div>
+
+          <Button variant="outline" onClick={fetchRequests} loading={loading} className="!p-2 w-max lg:w-auto self-start lg:self-center">
+            <RefreshCw className="h-4 w-4" />
+          </Button>
+        </div>
+
+        {error ? (
+          <div className="flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900/30 dark:bg-red-900/20 dark:text-red-300">
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>{error}</span>
+          </div>
+        ) : null}
+      </Card>
+
+      {loading ? (
+        <Card>
+          <div className="flex min-h-64 items-center justify-center">
+            <LoadingSpinner />
+          </div>
+        </Card>
+      ) : error ? (
+        <ErrorMessage message={error} retry={fetchRequests} />
+      ) : requests.length === 0 ? (
+        <EmptyState
+          title="No extension requests"
+          message="There are currently no extension requests from students."
+          icon={CalendarPlus}
+        />
+      ) : (
+        <div className="grid gap-4">
+          {requests.map((request) => (
+            <ExtensionRequestCard
+              key={request.id}
+              request={request}
+              onApprove={handleApprove}
+              onReject={handleReject}
+              onCounterOffer={() => setCounterOfferRequest(request)}
+            />
+          ))}
+        </div>
+      )}
+
+      {counterOfferRequest && (
+        <CounterOfferModal
+          request={counterOfferRequest}
+          onClose={() => setCounterOfferRequest(null)}
+          onSubmit={handleCounterOffer}
+        />
+      )}
+    </div>
+  );
+}
+
+function ExtensionRequestCard({ request, onApprove, onReject, onCounterOffer }) {
+  const [rejectionReason, setRejectionReason] = useState('');
+  const [showRejectInput, setShowRejectInput] = useState(false);
+  const [processing, setProcessing] = useState(false);
+  const [showConfirmApprove, setShowConfirmApprove] = useState(false);
+
+  const statusVariant =
+    request.status === 'approved' ? 'success' :
+    request.status === 'rejected' ? 'danger' :
+    request.status === 'pending' ? 'warning' :
+    request.status === 'counter_offered' ? 'primary' : 'secondary';
+
+  const statusLabel =
+    request.status === 'counter_offered' ? 'COUNTER OFFERED' : request.status.toUpperCase();
+
+  const isPending = request.status === 'pending';
+
+  const handleApprove = async () => {
+    setProcessing(true);
+    await onApprove(request.id);
+    setProcessing(false);
+    setShowConfirmApprove(false);
+  };
+
+  const handleReject = async () => {
+    if (rejectionReason.length < 10) {
+      toast.error('Rejection reason must be at least 10 characters');
+      return;
+    }
+    setProcessing(true);
+    await onReject(request.id, rejectionReason);
+    setProcessing(false);
+  };
+
+  return (
+    <Card className={`border-2 transition hover:shadow-lg ${
+      isPending
+        ? 'border-amber-200 dark:border-amber-800/40'
+        : request.status === 'counter_offered'
+          ? 'border-primary-200 dark:border-primary-800/40'
+          : 'border-gray-100 dark:border-gray-800'
+    }`}>
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div className="flex-1">
+          <div className="flex items-center gap-2 mb-2">
+            <p className="font-semibold text-gray-900 dark:text-white">{request.student_name}</p>
+            <Badge variant={statusVariant}>{statusLabel}</Badge>
+          </div>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            {request.student_email} • {request.program} • {request.batch}
+          </p>
+
+          <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="rounded-lg bg-gray-50 p-3 dark:bg-gray-800/50">
+              <p className="text-xs uppercase tracking-wider font-semibold text-gray-500 dark:text-gray-400">Current Expected</p>
+              <p className="mt-1 text-sm font-medium text-gray-900 dark:text-white">
+                {request.current_expected_graduation ? new Date(request.current_expected_graduation).toLocaleDateString() : 'N/A'}
+              </p>
+            </div>
+            <div className="rounded-lg bg-blue-50 p-3 dark:bg-blue-900/20">
+              <p className="text-xs uppercase tracking-wider font-semibold text-blue-600 dark:text-blue-400">Requested Date</p>
+              <p className="mt-1 text-sm font-bold text-blue-700 dark:text-blue-300">
+                {new Date(request.requested_graduation_date).toLocaleDateString()}
+              </p>
+            </div>
+            {request.counter_offered_date && (
+              <div className="rounded-lg bg-primary-50 p-3 dark:bg-primary-900/20">
+                <p className="text-xs uppercase tracking-wider font-semibold text-primary-600 dark:text-primary-400">Counter Offered</p>
+                <p className="mt-1 text-sm font-bold text-primary-700 dark:text-primary-300">
+                  {new Date(request.counter_offered_date).toLocaleDateString()}
+                </p>
+              </div>
+            )}
+          </div>
+
+          <div className="mt-4 rounded-xl bg-gray-50 p-4 border border-gray-100 dark:bg-gray-800/50 dark:border-gray-700/50">
+            <p className="text-xs uppercase tracking-wider font-semibold text-gray-500 dark:text-gray-400 mb-2">Student's Reason</p>
+            <p className="text-sm text-gray-700 dark:text-gray-300 italic">"{request.reason}"</p>
+          </div>
+
+          {request.supporting_document_path && (
+            <div className="mt-2 flex items-center gap-2 text-xs text-blue-600 dark:text-blue-400">
+              <CalendarPlus className="h-3 w-3" />
+              <span>Supporting document attached</span>
+            </div>
+          )}
+
+          {request.university_response && request.status !== 'pending' && (
+            <div className="mt-3 rounded-xl bg-gray-50 p-3 border border-gray-100 dark:bg-gray-800/50 dark:border-gray-700/50">
+              <p className="text-xs uppercase tracking-wider font-semibold text-gray-500 dark:text-gray-400 mb-1">University Response</p>
+              <p className="text-sm text-gray-700 dark:text-gray-300 italic">"{request.university_response}"</p>
+            </div>
+          )}
+
+          <p className="text-xs text-gray-400 mt-4 font-medium">
+            Requested {new Date(request.created_at).toLocaleDateString()}
+            {request.reviewed_at && ` • Reviewed ${new Date(request.reviewed_at).toLocaleDateString()}`}
+          </p>
+        </div>
+
+        {isPending && (
+          <div className="flex flex-col gap-2 lg:items-end w-full lg:w-auto mt-4 lg:mt-0">
+            {!showRejectInput && !showConfirmApprove ? (
+              <>
+                <Button variant="success" type="button" onClick={() => setShowConfirmApprove(true)} className="w-full lg:w-auto">
+                  <Check className="mr-2 h-4 w-4" />
+                  Approve
+                </Button>
+                <Button variant="danger" type="button" onClick={() => setShowRejectInput(true)} className="w-full lg:w-auto">
+                  <XCircle className="mr-2 h-4 w-4" />
+                  Reject
+                </Button>
+                <Button variant="secondary" type="button" onClick={onCounterOffer} className="w-full lg:w-auto">
+                  <ArrowRightLeft className="mr-2 h-4 w-4" />
+                  Counter-Offer
+                </Button>
+              </>
+            ) : showConfirmApprove ? (
+              <div className="space-y-3 w-full lg:w-80 bg-green-50 p-4 rounded-xl dark:bg-green-900/20 border border-green-200 dark:border-green-800/40">
+                <p className="text-sm font-medium text-green-800 dark:text-green-200">
+                  Approve this extension? The enrollment's expected graduation date will be updated to{' '}
+                  <strong>{new Date(request.requested_graduation_date).toLocaleDateString()}</strong>.
+                </p>
+                <div className="flex gap-2">
+                  <Button variant="secondary" type="button" onClick={() => setShowConfirmApprove(false)} className="flex-1">
+                    Cancel
+                  </Button>
+                  <Button variant="success" type="button" onClick={handleApprove} loading={processing} className="flex-1">
+                    Confirm Approve
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3 w-full lg:w-80 bg-gray-50 p-4 rounded-xl dark:bg-gray-900/50 border border-gray-100 dark:border-gray-800">
+                <label className="text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">Rejection Reason</label>
+                <textarea
+                  className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white min-h-[80px]"
+                  value={rejectionReason}
+                  onChange={(e) => setRejectionReason(e.target.value)}
+                  placeholder="Why is this request being rejected? (min 10 chars)..."
+                  minLength={10}
+                  maxLength={1000}
+                />
+                <div className="flex gap-2">
+                  <Button variant="secondary" type="button" onClick={() => setShowRejectInput(false)} className="flex-1">
+                    Cancel
+                  </Button>
+                  <Button variant="danger" type="button" onClick={handleReject} loading={processing} className="flex-1">
+                    Confirm Reject
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </Card>
+  );
+}
+
+function CounterOfferModal({ request, onClose, onSubmit }) {
+  const [counterDate, setCounterDate] = useState('');
+  const [message, setMessage] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+
+  // Min date: day after current expected graduation
+  const minDate = request.current_expected_graduation
+    ? (() => {
+        const d = new Date(request.current_expected_graduation);
+        d.setDate(d.getDate() + 1);
+        return d.toISOString().split('T')[0];
+      })()
+    : new Date().toISOString().split('T')[0];
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (message.length < 10) {
+      setError('Message must be at least 10 characters');
+      return;
+    }
+    setSubmitting(true);
+    setError('');
+    await onSubmit(request.id, counterDate, message);
+    setSubmitting(false);
+  };
+
+  return (
+    <Modal open={true} onClose={onClose} title="Counter-Offer Extension Date">
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="rounded-2xl bg-blue-50 p-4 dark:bg-blue-900/20">
+          <p className="text-sm font-semibold text-blue-800 dark:text-blue-200">Student Request Details</p>
+          <p className="mt-1 font-medium text-gray-900 dark:text-white">{request.student_name}</p>
+          <p className="text-sm text-gray-600 dark:text-gray-400">{request.program} • {request.batch}</p>
+          <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
+            <div>
+              <p className="text-xs text-gray-500 dark:text-gray-400">Current Expected</p>
+              <p className="font-medium text-gray-900 dark:text-white">
+                {request.current_expected_graduation ? new Date(request.current_expected_graduation).toLocaleDateString() : 'N/A'}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500 dark:text-gray-400">Student Requested</p>
+              <p className="font-medium text-blue-700 dark:text-blue-300">
+                {new Date(request.requested_graduation_date).toLocaleDateString()}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {error && (
+          <div className="rounded-2xl border border-red-200 bg-red-50 p-3 dark:border-red-900/30 dark:bg-red-900/20">
+            <p className="text-sm text-red-700 dark:text-red-300">{error}</p>
+          </div>
+        )}
+
+        <div>
+          <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
+            Your Proposed Date <span className="text-red-500">*</span>
+          </label>
+          <input
+            type="date"
+            className="block w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:focus:border-primary-400 dark:focus:ring-primary-400"
+            value={counterDate}
+            onChange={(e) => setCounterDate(e.target.value)}
+            min={minDate}
+            required
+          />
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+            Must be after current expected graduation date
+          </p>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
+            Message to Student <span className="text-red-500">*</span>
+          </label>
+          <textarea
+            className="w-full rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white dark:focus:border-primary-400 dark:focus:ring-primary-400 min-h-[100px]"
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            placeholder="Explain why you're proposing an alternative date (min 10 characters)..."
+            required
+            minLength={10}
+            maxLength={1000}
+          />
+          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">{message.length}/1000 characters</p>
+        </div>
+
+        <div className="flex gap-3">
+          <Button type="button" variant="secondary" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" loading={submitting} className="flex-1">
+            <ArrowRightLeft className="mr-2 h-4 w-4" />
+            Send Counter Offer
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+// ─── ENROLLMENT APPLICATIONS TAB ──────────────────────────────
+function ApplicationsTab() {
+  const [applications, setApplications] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [approvingApp, setApprovingApp] = useState(null);
+  const [moreInfoApp, setMoreInfoApp] = useState(null);
+
+  const fetchApplications = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const { data } = await api.get('/university/enrollment-applications');
+      setApplications(data.applications || []);
+    } catch (requestError) {
+      setError(requestError.response?.data?.message || 'Failed to fetch applications');
+      toast.error('Failed to fetch applications');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchApplications();
+  }, [fetchApplications]);
+
+  const handleReject = async (applicationId, universityResponse) => {
+    if (!universityResponse || universityResponse.length < 10) {
+      toast.error('Please provide a rejection reason (min 10 characters)');
+      return;
+    }
+    try {
+      await api.post(`/university/enrollment-applications/${applicationId}/reject`, {
+        university_response: universityResponse,
+      });
+      toast.success('Application rejected');
+      window.dispatchEvent(new Event('enrollment_applications_updated'));
+      fetchApplications();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to reject application');
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <Card className="space-y-4">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Enrollment Applications</h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Review student enrollment applications to your institution.</p>
+          </div>
+
+          <Button variant="outline" onClick={fetchApplications} loading={loading} className="!p-2 w-max lg:w-auto self-start lg:self-center">
+            <RefreshCw className="h-4 w-4" />
+          </Button>
+        </div>
+
+        {error ? (
+          <div className="flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900/30 dark:bg-red-900/20 dark:text-red-300">
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>{error}</span>
+          </div>
+        ) : null}
+      </Card>
+
+      {loading ? (
+        <Card>
+          <div className="flex min-h-64 items-center justify-center">
+            <LoadingSpinner />
+          </div>
+        </Card>
+      ) : error ? (
+        <ErrorMessage message={error} retry={fetchApplications} />
+      ) : applications.length === 0 ? (
+        <EmptyState
+          title="No applications"
+          message="There are currently no enrollment applications from students."
+          icon={FileText}
+        />
+      ) : (
+        <div className="grid gap-4">
+          {applications.map((application) => (
+            <ApplicationCard
+              key={application.id}
+              application={application}
+              onApprove={() => setApprovingApp(application)}
+              onReject={handleReject}
+              onRequestMoreInfo={() => setMoreInfoApp(application)}
+            />
+          ))}
+        </div>
+      )}
+
+      {approvingApp && (
+        <ApproveApplicationModal
+          application={approvingApp}
+          onClose={() => setApprovingApp(null)}
+          onSuccess={() => {
+            setApprovingApp(null);
+            window.dispatchEvent(new Event('enrollment_applications_updated'));
+            fetchApplications();
+          }}
+        />
+      )}
+
+      {moreInfoApp && (
+        <RequestMoreInfoModal
+          application={moreInfoApp}
+          onClose={() => setMoreInfoApp(null)}
+          onSuccess={() => {
+            setMoreInfoApp(null);
+            window.dispatchEvent(new Event('enrollment_applications_updated'));
+            fetchApplications();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function ApplicationCard({ application, onApprove, onReject, onRequestMoreInfo }) {
+  const [rejectionReason, setRejectionReason] = useState('');
+  const [showRejectInput, setShowRejectInput] = useState(false);
+  const [processing, setProcessing] = useState(false);
+
+  const statusVariant =
+    application.status === 'approved' ? 'success' :
+    application.status === 'rejected' ? 'danger' :
+    application.status === 'pending' ? 'warning' :
+    application.status === 'more_info_requested' ? 'primary' : 'secondary';
+
+  const statusLabel =
+    application.status === 'more_info_requested' ? 'MORE INFO REQUESTED' : application.status.toUpperCase();
+
+  const isPending = application.status === 'pending';
+
+  const handleReject = async () => {
+    if (rejectionReason.length < 10) {
+      toast.error('Rejection reason must be at least 10 characters');
+      return;
+    }
+    setProcessing(true);
+    await onReject(application.id, rejectionReason);
+    setProcessing(false);
+  };
+
+  return (
+    <Card className={`border-2 transition hover:shadow-lg ${
+      isPending
+        ? 'border-amber-200 dark:border-amber-800/40'
+        : application.status === 'more_info_requested'
+          ? 'border-primary-200 dark:border-primary-800/40'
+          : 'border-gray-100 dark:border-gray-800'
+    }`}>
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div className="flex-1">
+          <div className="flex items-center gap-2 mb-2">
+            <p className="font-semibold text-gray-900 dark:text-white">{application.student_name}</p>
+            <Badge variant={statusVariant}>{statusLabel}</Badge>
+          </div>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            {application.student_email}
+            {application.student_current_id && ` • Current ID: ${application.student_current_id}`}
+          </p>
+
+          <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="rounded-lg bg-gray-50 p-3 dark:bg-gray-800/50">
+              <p className="text-xs uppercase tracking-wider font-semibold text-gray-500 dark:text-gray-400">Program</p>
+              <p className="mt-1 text-sm font-medium text-gray-900 dark:text-white">
+                {application.program || 'Not specified'}
+              </p>
+            </div>
+            <div className="rounded-lg bg-gray-50 p-3 dark:bg-gray-800/50">
+              <p className="text-xs uppercase tracking-wider font-semibold text-gray-500 dark:text-gray-400">Batch</p>
+              <p className="mt-1 text-sm font-medium text-gray-900 dark:text-white">
+                {application.batch || 'Not specified'}
+              </p>
+            </div>
+            <div className="rounded-lg bg-gray-50 p-3 dark:bg-gray-800/50">
+              <p className="text-xs uppercase tracking-wider font-semibold text-gray-500 dark:text-gray-400">Applied</p>
+              <p className="mt-1 text-sm font-medium text-gray-900 dark:text-white">
+                {new Date(application.created_at).toLocaleDateString()}
+              </p>
+            </div>
+          </div>
+
+          {application.reason && (
+            <div className="mt-4 rounded-xl bg-gray-50 p-4 border border-gray-100 dark:bg-gray-800/50 dark:border-gray-700/50">
+              <p className="text-xs uppercase tracking-wider font-semibold text-gray-500 dark:text-gray-400 mb-2">Student's Reason</p>
+              <p className="text-sm text-gray-700 dark:text-gray-300 italic">"{application.reason}"</p>
+            </div>
+          )}
+
+          {application.document_path && (
+            <div className="mt-2 flex items-center gap-2 text-xs text-blue-600 dark:text-blue-400">
+              <FileText className="h-3 w-3" />
+              <span>Supporting document attached</span>
+            </div>
+          )}
+
+          {application.university_response && application.status !== 'pending' && (
+            <div className="mt-3 rounded-xl bg-gray-50 p-3 border border-gray-100 dark:bg-gray-800/50 dark:border-gray-700/50">
+              <p className="text-xs uppercase tracking-wider font-semibold text-gray-500 dark:text-gray-400 mb-1">University Response</p>
+              <p className="text-sm text-gray-700 dark:text-gray-300 italic">"{application.university_response}"</p>
+            </div>
+          )}
+
+          <p className="text-xs text-gray-400 mt-4 font-medium">
+            Applied {new Date(application.created_at).toLocaleDateString()}
+            {application.reviewed_at && ` • Reviewed ${new Date(application.reviewed_at).toLocaleDateString()}`}
+          </p>
+        </div>
+
+        {isPending && (
+          <div className="flex flex-col gap-2 lg:items-end w-full lg:w-auto mt-4 lg:mt-0">
+            {!showRejectInput ? (
+              <>
+                <Button variant="success" type="button" onClick={onApprove} className="w-full lg:w-auto">
+                  <Check className="mr-2 h-4 w-4" />
+                  Approve & Enroll
+                </Button>
+                <Button variant="danger" type="button" onClick={() => setShowRejectInput(true)} className="w-full lg:w-auto">
+                  <XCircle className="mr-2 h-4 w-4" />
+                  Reject
+                </Button>
+                <Button variant="secondary" type="button" onClick={onRequestMoreInfo} className="w-full lg:w-auto">
+                  <Info className="mr-2 h-4 w-4" />
+                  Request More Info
+                </Button>
+              </>
+            ) : (
+              <div className="space-y-3 w-full lg:w-80 bg-gray-50 p-4 rounded-xl dark:bg-gray-900/50 border border-gray-100 dark:border-gray-800">
+                <label className="text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">Rejection Reason</label>
+                <textarea
+                  className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white min-h-[80px]"
+                  value={rejectionReason}
+                  onChange={(e) => setRejectionReason(e.target.value)}
+                  placeholder="Why is this application being rejected? (min 10 chars)..."
+                  minLength={10}
+                  maxLength={1000}
+                />
+                <div className="flex gap-2">
+                  <Button variant="secondary" type="button" onClick={() => setShowRejectInput(false)} className="flex-1">
+                    Cancel
+                  </Button>
+                  <Button variant="danger" type="button" onClick={handleReject} loading={processing} className="flex-1">
+                    Confirm Reject
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </Card>
+  );
+}
+
+function ApproveApplicationModal({ application, onClose, onSuccess }) {
+  const [formData, setFormData] = useState({
+    student_id: application.student_current_id || '',
+    program_level: '',
+    department_id: '',
+    batch: application.batch || '',
+    enrollment_date: new Date().toISOString().split('T')[0],
+    expected_graduation_date: '',
+  });
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+  const [departments, setDepartments] = useState([]);
+
+  useEffect(() => {
+    api.get('/university/departments').then(({ data }) => {
+      setDepartments(data.departments?.filter(d => d.is_active) || []);
+    }).catch(console.error);
+  }, []);
+
+  const calculateGraduationDate = (level, enrollDateStr) => {
+    if (!level || !enrollDateStr) return '';
+    const date = new Date(enrollDateStr);
+    if (isNaN(date.getTime())) return '';
+    if (level === 'Bachelors') date.setFullYear(date.getFullYear() + 4);
+    else if (level === 'Masters') date.setFullYear(date.getFullYear() + 2);
+    else if (level === 'PhD') date.setFullYear(date.getFullYear() + 3);
+    return date.toISOString().split('T')[0];
+  };
+
+  const handleProgramLevelChange = (level) => {
+    const newGrad = calculateGraduationDate(level, formData.enrollment_date);
+    setFormData(c => ({ ...c, program_level: level, expected_graduation_date: newGrad || c.expected_graduation_date }));
+  };
+
+  const handleEnrollmentDateChange = (dateStr) => {
+    const newGrad = calculateGraduationDate(formData.program_level, dateStr);
+    setFormData(c => ({ ...c, enrollment_date: dateStr, expected_graduation_date: newGrad || c.expected_graduation_date }));
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    if (formData.expected_graduation_date && new Date(formData.expected_graduation_date) <= new Date(formData.enrollment_date)) {
+      toast.error('Expected graduation date must be after enrollment date');
+      return;
+    }
+
+    setSubmitting(true);
+    setError('');
+
+    try {
+      const payload = { ...formData };
+      if (formData.department_id) payload.department_id = Number(formData.department_id);
+
+      await api.post(`/university/enrollment-applications/${application.id}/approve`, payload);
+      toast.success('Application approved — student enrolled successfully');
+      onSuccess();
+    } catch (err) {
+      const errorData = err.response?.data;
+      if (errorData?.message) {
+        let errorMessage = errorData.message;
+        if (errorData.current_enrollment) {
+          const current = errorData.current_enrollment;
+          errorMessage += `\n\nCurrent Enrollment:\nInstitution: ${current.institution}\nProgram: ${current.program} (${current.batch})\nStatus: ${current.status}`;
+        }
+        setError(errorMessage);
+        toast.error(errorData.message);
+      } else {
+        setError('Failed to approve application');
+        toast.error('Failed to approve application');
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Modal open={true} onClose={onClose} title="Approve Application & Enroll Student" size="lg">
+      <form className="space-y-4" onSubmit={handleSubmit}>
+        <div className="rounded-2xl bg-green-50 p-4 dark:bg-green-900/20">
+          <p className="text-sm font-semibold text-green-800 dark:text-green-200">Approving Application From</p>
+          <p className="mt-1 font-medium text-gray-900 dark:text-white">{application.student_name}</p>
+          <p className="text-sm text-gray-600 dark:text-gray-400">{application.student_email}</p>
+          {application.program && (
+            <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">Requested Program: {application.program}</p>
+          )}
+          {application.batch && (
+            <p className="text-sm text-gray-600 dark:text-gray-400">Requested Batch: {application.batch}</p>
+          )}
+        </div>
+
+        {error && (
+          <div className="rounded-2xl border border-red-200 bg-red-50 p-4 dark:border-red-900/30 dark:bg-red-900/20">
+            <div className="flex items-start">
+              <AlertCircle className="mr-2 mt-0.5 h-5 w-5 flex-shrink-0 text-red-600 dark:text-red-400" />
+              <div className="whitespace-pre-line text-sm text-red-700 dark:text-red-300">
+                {error}
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="space-y-1">
+          <Input
+            label="Student ID"
+            type="text"
+            placeholder="e.g. UIU-2026-001234"
+            value={formData.student_id}
+            onChange={(e) => setFormData(c => ({ ...c, student_id: e.target.value }))}
+            required
+          />
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            Assign a unique student ID for this student within your university.
+          </p>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="space-y-1">
+            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+              Program Level <span className="text-red-500">*</span>
+            </label>
+            <select
+              value={formData.program_level}
+              onChange={(e) => handleProgramLevelChange(e.target.value)}
+              className="block w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:focus:border-primary-400 dark:focus:ring-primary-400"
+              required
+            >
+              <option value="">Select Level</option>
+              <option value="Bachelors">Bachelors</option>
+              <option value="Masters">Masters</option>
+              <option value="PhD">PhD</option>
+            </select>
+          </div>
+          <div className="space-y-1">
+            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+              Department
+            </label>
+            <select
+              value={formData.department_id}
+              onChange={(e) => setFormData(c => ({ ...c, department_id: e.target.value }))}
+              className="block w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:focus:border-primary-400 dark:focus:ring-primary-400"
+            >
+              <option value="">Select Department (Optional)</option>
+              {departments.map(dept => (
+                <option key={dept.id} value={dept.id}>{dept.name}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2">
+          <Input
+            label="Batch"
+            type="text"
+            placeholder="e.g. Spring 2024"
+            value={formData.batch}
+            onChange={(e) => setFormData(c => ({ ...c, batch: e.target.value }))}
+            required
+          />
+          <Input
+            label="Enrollment Date"
+            type="date"
+            value={formData.enrollment_date}
+            onChange={(e) => handleEnrollmentDateChange(e.target.value)}
+            required
+          />
+        </div>
+
+        <Input
+          label="Expected Graduation Date"
+          type="date"
+          value={formData.expected_graduation_date}
+          onChange={(e) => setFormData(c => ({ ...c, expected_graduation_date: e.target.value }))}
+        />
+
+        <div className="flex flex-col gap-3 pt-2 sm:flex-row">
+          <Button type="button" variant="secondary" onClick={onClose} disabled={submitting}>
+            Cancel
+          </Button>
+          <Button type="submit" variant="success" loading={submitting} className="sm:flex-1">
+            <Check className="mr-2 h-4 w-4" />
+            Approve & Enroll Student
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+function RequestMoreInfoModal({ application, onClose, onSuccess }) {
+  const [message, setMessage] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (message.length < 10) {
+      setError('Message must be at least 10 characters');
+      return;
+    }
+    setSubmitting(true);
+    setError('');
+
+    try {
+      await api.post(`/university/enrollment-applications/${application.id}/request-more-info`, {
+        university_response: message,
+      });
+      toast.success('Request for more information sent to student');
+      onSuccess();
+    } catch (err) {
+      const errorMsg = err.response?.data?.message || 'Failed to send request';
+      setError(errorMsg);
+      toast.error(errorMsg);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Modal open={true} onClose={onClose} title="Request More Information">
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="rounded-2xl bg-blue-50 p-4 dark:bg-blue-900/20">
+          <p className="text-sm font-semibold text-blue-800 dark:text-blue-200">Requesting more info from</p>
+          <p className="mt-1 font-medium text-gray-900 dark:text-white">{application.student_name}</p>
+          <p className="text-sm text-gray-600 dark:text-gray-400">{application.student_email}</p>
+        </div>
+
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-800/30 dark:bg-amber-900/20">
+          <p className="text-sm text-amber-800 dark:text-amber-200">
+            <strong>Note:</strong> The student will be notified and can see your message on their My University page.
+            They will need to contact you directly to provide additional information.
+          </p>
+        </div>
+
+        {error && (
+          <div className="rounded-2xl border border-red-200 bg-red-50 p-3 dark:border-red-900/30 dark:bg-red-900/20">
+            <p className="text-sm text-red-700 dark:text-red-300">{error}</p>
+          </div>
+        )}
+
+        <div>
+          <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
+            Message to Student <span className="text-red-500">*</span>
+          </label>
+          <textarea
+            className="w-full rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white dark:focus:border-primary-400 dark:focus:ring-primary-400 min-h-[120px]"
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            placeholder="Explain what additional information or documents you need from the student (min 10 characters)..."
+            required
+            minLength={10}
+            maxLength={1000}
+          />
+          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">{message.length}/1000 characters</p>
+        </div>
+
+        <div className="flex gap-3">
+          <Button type="button" variant="secondary" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" loading={submitting} className="flex-1">
+            <Info className="mr-2 h-4 w-4" />
+            Send Request
+          </Button>
+        </div>
+      </form>
+    </Modal>
   );
 }
