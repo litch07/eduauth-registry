@@ -4,7 +4,7 @@ import toast from 'react-hot-toast';
 import {
   Users, Search, Filter, Download, ChevronLeft, ChevronRight,
   GraduationCap, Building2, ShieldCheck, UserCog, Eye, MoreVertical,
-  CheckCircle, XCircle, Clock, Mail, X, RefreshCw, UserCheck,
+  CheckCircle, XCircle, Clock, Mail, X, RefreshCw, UserCheck, Ban, RotateCcw
 } from 'lucide-react';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import Card from '../../components/shared/Card';
@@ -13,6 +13,7 @@ import Badge from '../../components/shared/Badge';
 import LoadingSpinner from '../../components/shared/LoadingSpinner';
 import Modal from '../../components/shared/Modal';
 import api from '../../services/api';
+import { formatDate } from '../../utils/helpers';
 
 const STATUS_TABS = [
   { value: 'all', label: 'All' },
@@ -113,6 +114,8 @@ export default function AdminUsers() {
   // Action modals
   const [rejectModal, setRejectModal] = useState(null);
   const [rejectReason, setRejectReason] = useState('');
+  const [suspendModal, setSuspendModal] = useState(null);
+  const [suspendReason, setSuspendReason] = useState('');
   const [actionLoading, setActionLoading] = useState(null);
   const [menuOpen, setMenuOpen] = useState(null);
 
@@ -230,6 +233,37 @@ export default function AdminUsers() {
     }
   };
 
+  const handleSuspend = async () => {
+    if (!suspendReason.trim()) return;
+    setActionLoading(suspendModal);
+    try {
+      await api.post(`/admin/users/${suspendModal}/suspend`, { reason: suspendReason });
+      toast.success('User suspended.');
+      setUsers((prev) => prev.map((u) => u.id === suspendModal ? { ...u, suspended_at: new Date().toISOString(), suspension_reason: suspendReason } : u));
+      setSuspendModal(null);
+      setSuspendReason('');
+      setMenuOpen(null);
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to suspend.');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleUnsuspend = async (userId) => {
+    setActionLoading(userId);
+    try {
+      await api.post(`/admin/users/${userId}/unsuspend`);
+      toast.success('User unsuspended.');
+      setUsers((prev) => prev.map((u) => u.id === userId ? { ...u, suspended_at: null, suspension_reason: null } : u));
+      setMenuOpen(null);
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to unsuspend.');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   const clearFilters = () => {
     setRole('all');
     setSearchQuery('');
@@ -306,7 +340,7 @@ export default function AdminUsers() {
                   value={searchQuery}
                   onChange={(e) => handleSearchChange(e.target.value)}
                   placeholder="Search by name, email, ID..."
-                  className="w-full rounded-xl border border-gray-300 bg-white pl-10 pr-10 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 dark:border-gray-700 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500"
+                  className="w-full rounded-xl border border-gray-300 bg-white pl-10 pr-10 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500"
                 />
                 {searchQuery && (
                   <button
@@ -324,7 +358,7 @@ export default function AdminUsers() {
               <select
                 value={role}
                 onChange={(e) => setRole(e.target.value)}
-                className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
               >
                 {ROLE_OPTIONS.map((opt) => (
                   <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -338,14 +372,14 @@ export default function AdminUsers() {
                 type="date"
                 value={dateFrom}
                 onChange={(e) => { setDateFrom(e.target.value); fetchUsers(1, { dateFrom: e.target.value }); }}
-                className="w-full flex-1 rounded-xl border border-gray-300 bg-white px-2 py-2.5 text-sm text-gray-900 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                className="w-full flex-1 rounded-xl border border-gray-300 bg-white px-2 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
                 title="From date"
               />
               <input
                 type="date"
                 value={dateTo}
                 onChange={(e) => { setDateTo(e.target.value); fetchUsers(1, { dateTo: e.target.value }); }}
-                className="w-full flex-1 rounded-xl border border-gray-300 bg-white px-2 py-2.5 text-sm text-gray-900 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                className="w-full flex-1 rounded-xl border border-gray-300 bg-white px-2 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
                 title="To date"
               />
             </div>
@@ -387,7 +421,7 @@ export default function AdminUsers() {
                 <thead>
                   <tr className="border-b border-gray-200 dark:border-gray-700">
                     {['User', 'Status', 'Details', 'Joined', 'Actions'].map((h) => (
-                      <th key={h} className="py-3 px-4 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 first:pl-0 last:pr-0 last:text-right">
+                      <th key={h} className="py-3 px-4 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 first:pl-0 last:text-right">
                         {h}
                       </th>
                     ))}
@@ -399,23 +433,25 @@ export default function AdminUsers() {
                     return (
                       <tr key={user.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition group">
                         {/* User info */}
-                        <td className="py-3 px-4 pl-0">
-                          <div className="flex items-center gap-3">
-                            <div className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-${cfg.color === 'primary' ? 'primary' : cfg.color === 'success' ? 'green' : cfg.color === 'warning' ? 'amber' : 'red'}-100 dark:bg-${cfg.color === 'primary' ? 'primary' : cfg.color === 'success' ? 'green' : cfg.color === 'warning' ? 'amber' : 'red'}-900/30`}>
+                        <td className="px-4 py-4 pl-0">
+                          <div className="flex items-center gap-4">
+                            <div className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full bg-${cfg.color === 'primary' ? 'primary' : cfg.color === 'success' ? 'green' : cfg.color === 'warning' ? 'amber' : 'red'}-100 dark:bg-${cfg.color === 'primary' ? 'primary' : cfg.color === 'success' ? 'green' : cfg.color === 'warning' ? 'amber' : 'red'}-900/30`}>
                               <RoleIcon role={user.role} className={`h-5 w-5 text-${cfg.color === 'primary' ? 'primary' : cfg.color === 'success' ? 'green' : cfg.color === 'warning' ? 'amber' : 'red'}-600 dark:text-${cfg.color === 'primary' ? 'primary' : cfg.color === 'success' ? 'green' : cfg.color === 'warning' ? 'amber' : 'red'}-400`} />
                             </div>
-                            <div className="min-w-0">
+                            <div className="min-w-0 space-y-1">
                               <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
                                 {user.name}
                               </p>
                               <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{user.email}</p>
-                              <RoleBadge role={user.role} />
+                              <div>
+                                <RoleBadge role={user.role} />
+                              </div>
                             </div>
                           </div>
                         </td>
 
                         {/* Status */}
-                        <td className="py-3 px-4">
+                        <td className="px-4 py-4">
                           <div className="space-y-1">
                             <div className="flex items-center gap-1.5">
                               {user.email_verified_at ? (
@@ -435,26 +471,31 @@ export default function AdminUsers() {
                                 {user.is_approved ? 'Approved' : 'Pending'}
                               </span>
                             </div>
+                            {user.suspended_at && (
+                              <div className="mt-1">
+                                <Badge variant="error">Suspended</Badge>
+                              </div>
+                            )}
                           </div>
                         </td>
 
                         {/* Role details */}
-                        <td className="py-3 px-4">
+                        <td className="px-4 py-4">
                           <RoleDetail user={user} />
                         </td>
 
                         {/* Joined */}
-                        <td className="py-3 px-4">
+                        <td className="px-4 py-4">
                           <div>
                             <p className="text-xs text-gray-700 dark:text-gray-300">
-                              {user.created_at ? new Date(user.created_at).toLocaleDateString() : '—'}
+                              {user.created_at ? formatDate(user.created_at) : '—'}
                             </p>
                             <p className="text-[10px] text-gray-400">{timeAgo(user.created_at)}</p>
                           </div>
                         </td>
 
                         {/* Actions */}
-                        <td className="py-3 px-4 pr-0 text-right">
+                        <td className="px-4 py-4 text-right">
                           <div className="flex items-center justify-end gap-2">
                             <button
                               onClick={() => navigate(`/admin/users/${user.id}`)}
@@ -481,6 +522,27 @@ export default function AdminUsers() {
                                 </button>
                               </>
                             )}
+
+                            {user.is_approved && user.role !== 'admin' && !user.suspended_at && (
+                              <button
+                                onClick={() => setSuspendModal(user.id)}
+                                className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 dark:border-red-900/40 px-3 py-1.5 text-xs font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition"
+                                title="Suspend User"
+                              >
+                                <Ban className="h-3.5 w-3.5" /> Suspend
+                              </button>
+                            )}
+                            
+                            {user.is_approved && user.role !== 'admin' && user.suspended_at && (
+                              <button
+                                onClick={() => handleUnsuspend(user.id)}
+                                disabled={actionLoading === user.id}
+                                className="inline-flex items-center gap-1.5 rounded-lg border border-green-200 dark:border-green-900/40 px-3 py-1.5 text-xs font-medium text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20 transition"
+                                title="Unsuspend User"
+                              >
+                                <RotateCcw className="h-3.5 w-3.5" /> Unsuspend
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -492,51 +554,49 @@ export default function AdminUsers() {
           )}
 
           {/* Pagination */}
-          {lastPage > 1 && (
-            <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-gray-100 dark:border-gray-800 pt-4">
-              <div className="flex items-center gap-3">
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  Page {currentPage} of {lastPage} · {total} users
-                </p>
-                <select
-                  value={perPage}
-                  onChange={(e) => setPerPage(Number(e.target.value))}
-                  className="rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-2 py-1 text-xs text-gray-700 dark:text-gray-300"
-                >
-                  {PER_PAGE_OPTIONS.map((n) => (
-                    <option key={n} value={n}>{n}/page</option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex gap-2">
-                <Button variant="secondary" onClick={() => handlePageChange(currentPage - 1)} disabled={currentPage <= 1 || loading}>
-                  <ChevronLeft className="h-4 w-4 mr-1" /> Prev
-                </Button>
-                <div className="hidden sm:flex gap-1">
-                  {Array.from({ length: Math.min(5, lastPage) }, (_, i) => {
-                    const page = Math.max(1, Math.min(currentPage - 2, lastPage - 4)) + i;
-                    if (page > lastPage) return null;
-                    return (
-                      <button
-                        key={page}
-                        onClick={() => handlePageChange(page)}
-                        className={`h-9 w-9 rounded-lg text-sm font-medium transition ${
-                          page === currentPage
-                            ? 'bg-primary-600 text-white'
-                            : 'border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
-                        }`}
-                      >
-                        {page}
-                      </button>
-                    );
-                  })}
-                </div>
-                <Button variant="secondary" onClick={() => handlePageChange(currentPage + 1)} disabled={currentPage >= lastPage || loading}>
-                  Next <ChevronRight className="h-4 w-4 ml-1" />
-                </Button>
-              </div>
+          <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-gray-100 dark:border-gray-800 pt-4">
+            <div className="flex items-center gap-3">
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Page {currentPage} of {Math.max(1, lastPage)} · {total} users
+              </p>
+              <select
+                value={perPage}
+                onChange={(e) => setPerPage(Number(e.target.value))}
+                className="rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-2 py-1 text-xs text-gray-700 dark:text-gray-300"
+              >
+                {PER_PAGE_OPTIONS.map((n) => (
+                  <option key={n} value={n}>{n}/page</option>
+                ))}
+              </select>
             </div>
-          )}
+            <div className="flex gap-2">
+              <Button variant="secondary" onClick={() => handlePageChange(currentPage - 1)} disabled={currentPage <= 1 || loading}>
+                <ChevronLeft className="h-4 w-4 mr-1" /> Prev
+              </Button>
+              <div className="hidden sm:flex gap-1">
+                {Array.from({ length: Math.min(5, Math.max(1, lastPage)) }, (_, i) => {
+                  const page = Math.max(1, Math.min(currentPage - 2, Math.max(1, lastPage) - 4)) + i;
+                  if (page > Math.max(1, lastPage)) return null;
+                  return (
+                    <button
+                      key={page}
+                      onClick={() => handlePageChange(page)}
+                      className={`h-9 w-9 rounded-lg text-sm font-medium transition ${
+                        page === currentPage
+                          ? 'bg-primary-600 text-white'
+                          : 'border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
+                      }`}
+                    >
+                      {page}
+                    </button>
+                  );
+                })}
+              </div>
+              <Button variant="secondary" onClick={() => handlePageChange(currentPage + 1)} disabled={currentPage >= Math.max(1, lastPage) || loading}>
+                Next <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
+            </div>
+          </div>
         </Card>
       </div>
 
@@ -556,7 +616,7 @@ export default function AdminUsers() {
             onChange={(e) => setRejectReason(e.target.value)}
             placeholder="Reason for rejection..."
             rows={3}
-            className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm text-gray-900 placeholder-gray-400 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 dark:border-gray-700 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500 resize-none"
+            className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500 resize-none"
           />
           <div className="flex justify-end gap-3">
             <Button variant="secondary" onClick={() => { setRejectModal(null); setRejectReason(''); }}>
@@ -569,6 +629,40 @@ export default function AdminUsers() {
               disabled={!rejectReason.trim()}
             >
               Reject User
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Suspend Modal */}
+      <Modal
+        open={!!suspendModal}
+        onClose={() => { setSuspendModal(null); setSuspendReason(''); }}
+        title="Suspend User"
+        size="sm"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            This will suspend the user, preventing them from logging in.
+          </p>
+          <textarea
+            value={suspendReason}
+            onChange={(e) => setSuspendReason(e.target.value)}
+            placeholder="Reason for suspension..."
+            rows={3}
+            className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500 resize-none"
+          />
+          <div className="flex justify-end gap-3">
+            <Button variant="secondary" onClick={() => { setSuspendModal(null); setSuspendReason(''); }}>
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              onClick={handleSuspend}
+              loading={actionLoading === suspendModal}
+              disabled={!suspendReason.trim()}
+            >
+              Suspend User
             </Button>
           </div>
         </div>

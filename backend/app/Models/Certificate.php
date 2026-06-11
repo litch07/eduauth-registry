@@ -16,9 +16,12 @@ class Certificate extends Model
         'institution_id',
         'enrollment_id',
         'serial',
+        'certificate_level_id',
         'certificate_level',
         'certificate_name',
+        'department_id',
         'department',
+        'major_id',
         'major',
         'session',
         'cgpa',
@@ -32,6 +35,7 @@ class Certificate extends Model
         'issued_by',
         'revoked_at',
         'revoked_by',
+        'revoked_by_role',
         'revocation_reason',
         'revocation_history',
         'issued_name',
@@ -123,6 +127,21 @@ class Certificate extends Model
     public function verificationLogs()
     {
         return $this->hasMany(VerificationLog::class);
+    }
+
+    public function certificateLevel()
+    {
+        return $this->belongsTo(CertificateLevel::class);
+    }
+
+    public function department()
+    {
+        return $this->belongsTo(Department::class);
+    }
+
+    public function majorRelation()
+    {
+        return $this->belongsTo(Major::class, 'major_id');
     }
 
     public function scopeNotRevoked($query)

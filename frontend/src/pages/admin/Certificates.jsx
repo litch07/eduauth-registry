@@ -18,6 +18,7 @@ import {
 import RevocationModal from '../../components/shared/RevocationModal';
 import RestoreModal from '../../components/shared/RestoreModal';
 import StatusTimeline from '../../components/shared/StatusTimeline';
+import { formatDate, formatDateTime } from '../../utils/helpers';
 
 function InfoRow({ icon: Icon, label, value }) {
   if (value === undefined || value === null || value === '') return null;
@@ -25,7 +26,7 @@ function InfoRow({ icon: Icon, label, value }) {
     <div className="flex items-start gap-3 py-2.5 border-b border-gray-100 dark:border-gray-800 last:border-0">
       {Icon && <Icon className="mt-0.5 h-4 w-4 flex-shrink-0 text-gray-400" />}
       <span className="w-36 flex-shrink-0 text-sm text-gray-500 dark:text-gray-400">{label}</span>
-      <span className="text-sm font-medium text-gray-900 dark:text-white break-all">{String(value)}</span>
+      <span className="text-sm font-medium text-gray-900 dark:text-white break-words">{String(value)}</span>
     </div>
   );
 }
@@ -78,9 +79,9 @@ export default function AdminCertificates() {
       const q = searchQuery.toLowerCase();
       result = result.filter((c) =>
         c.serial?.toLowerCase().includes(q) ||
-        c.certificate_name?.toLowerCase().includes(q) ||
         c.student_name?.toLowerCase().includes(q) ||
-        c.institution_name?.toLowerCase().includes(q)
+        c.institution_name?.toLowerCase().includes(q) ||
+        (c.revoked_at ? 'revoked' : 'active').includes(q)
       );
     }
     if (statusFilter === 'active') {
@@ -110,7 +111,7 @@ export default function AdminCertificates() {
         toast.success('Certificate revoked successfully');
         setCertificates(certs => certs.map(c =>
           c.id === selectedCertificate.id
-            ? { ...c, revoked_at: new Date().toISOString(), revocation_reason: reason }
+            ? { ...c, revoked_at: new Date().toISOString(), revocation_reason: reason, revoked_by_role: 'admin' }
             : c
         ));
         // Sync details modal if it's open for this cert
@@ -119,6 +120,7 @@ export default function AdminCertificates() {
             ...prev,
             revoked_at: new Date().toISOString(),
             revocation_reason: reason,
+            revoked_by_role: 'admin',
           }));
         }
         handleRevokeModalClose();
@@ -147,7 +149,7 @@ export default function AdminCertificates() {
         // Update table list
         setCertificates(certs => certs.map(c =>
           c.id === restoreTarget.id
-            ? { ...c, revoked_at: null, revocation_reason: null, revocation_history: data.certificate?.revocation_history }
+            ? { ...c, revoked_at: null, revocation_reason: null, revoked_by_role: null, revocation_history: data.certificate?.revocation_history }
             : c
         ));
         // Update details modal if open for this cert
@@ -157,6 +159,7 @@ export default function AdminCertificates() {
             revoked_at: null,
             revocation_reason: null,
             revoked_by_name: null,
+            revoked_by_role: null,
             revocation_history: data.certificate?.revocation_history ?? prev.revocation_history,
           }));
         }
@@ -212,7 +215,7 @@ export default function AdminCertificates() {
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Search by serial, name, student, institution..."
-                  className="w-full rounded-xl border border-gray-300 bg-white pl-10 pr-10 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 dark:border-gray-700 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500"
+                  className="w-full rounded-xl border border-gray-300 bg-white pl-10 pr-10 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500"
                 />
                 {searchQuery && (
                   <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
@@ -224,7 +227,7 @@ export default function AdminCertificates() {
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+              className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
             >
               <option value="all">All Statuses</option>
               <option value="active">Active</option>
@@ -256,22 +259,27 @@ export default function AdminCertificates() {
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                   {filtered.map((cert) => (
-                    <tr key={cert.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition">
-                      <td className="py-3 px-3 font-mono text-xs text-gray-900 dark:text-white">{cert.serial}</td>
-                      <td className="py-3 px-3 text-xs text-gray-700 dark:text-gray-300 max-w-[180px] truncate">{cert.certificate_name}</td>
-                      <td className="py-3 px-3 text-xs text-gray-500 dark:text-gray-400">{cert.student_name}</td>
-                      <td className="py-3 px-3 text-xs text-gray-500 dark:text-gray-400">{cert.institution_name}</td>
-                      <td className="py-3 px-3 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">
-                        {cert.issue_date ? new Date(cert.issue_date).toLocaleDateString() : '—'}
+                    <tr key={cert.id} className="h-12 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition">
+                      <td className="px-3 py-0 font-mono text-xs text-gray-900 dark:text-white">{cert.serial}</td>
+                      <td className="px-3 py-0 text-xs text-gray-700 dark:text-gray-300 max-w-[180px] truncate">{cert.certificate_name}</td>
+                      <td className="px-3 py-0 text-xs text-gray-500 dark:text-gray-400">{cert.student_name}</td>
+                      <td className="px-3 py-0 text-xs text-gray-500 dark:text-gray-400">{cert.institution_name}</td>
+                      <td className="px-3 py-0 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                        {formatDate(cert.issue_date)}
                       </td>
-                      <td className="py-3 px-3">
+                      <td className="px-3 py-0">
                         {cert.revoked_at ? (
-                          <Badge variant="error">Revoked</Badge>
+                          <div className="space-y-1 py-1.5">
+                            <Badge variant="error">Revoked</Badge>
+                            <p className="text-xs text-gray-400 dark:text-gray-500">
+                              by {cert.revoked_by_role === 'admin' ? 'Admin' : cert.revoked_by_role === 'university' ? 'University' : '—'}
+                            </p>
+                          </div>
                         ) : (
                           <Badge variant="success">Active</Badge>
                         )}
                       </td>
-                      <td className="py-3 px-3 text-right">
+                      <td className="px-3 py-0 text-right">
                         <div className="flex items-center justify-end gap-2">
                           <button
                             onClick={() => openDetails(cert.id)}
@@ -328,7 +336,7 @@ export default function AdminCertificates() {
       />
 
       {/* Certificate Details Modal */}
-      <Modal open={!!certDetail} onClose={() => setCertDetail(null)} title="Certificate Details" size="lg">
+      <Modal open={!!certDetail} onClose={() => setCertDetail(null)} title="Certificate Details" size="xl">
         {detailLoading ? (
           <div className="flex justify-center py-10"><LoadingSpinner /></div>
         ) : certDetail ? (
@@ -349,8 +357,19 @@ export default function AdminCertificates() {
                   <p className={`text-sm font-semibold ${certDetail.revoked_at ? 'text-red-800 dark:text-red-300' : 'text-green-800 dark:text-green-300'}`}>
                     {certDetail.revoked_at ? 'Certificate Revoked' : 'Certificate Active'}
                   </p>
-                  {certDetail.revoked_at && certDetail.revocation_reason && (
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Reason: {certDetail.revocation_reason}</p>
+                  {certDetail.revoked_at && (
+                    <div className="mt-1 space-y-0.5">
+                      {certDetail.revoked_by_name && (
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                          <span className="font-medium">By:</span> {certDetail.revoked_by_name} <span className="italic">({certDetail.revoked_by_role})</span>
+                        </p>
+                      )}
+                      {certDetail.revocation_reason && (
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                          <span className="font-medium">Reason:</span> {certDetail.revocation_reason}
+                        </p>
+                      )}
+                    </div>
                   )}
                 </div>
               </div>
@@ -366,7 +385,7 @@ export default function AdminCertificates() {
               )}
             </div>
 
-            <div className="grid gap-6 lg:grid-cols-[1.4fr_0.6fr]">
+            <div className="grid gap-6 lg:grid-cols-[3fr_2fr]">
               {/* Certificate info */}
               <div>
                 <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">Certificate Information</h3>
@@ -427,7 +446,7 @@ export default function AdminCertificates() {
                   <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">Verification</h3>
                   <div className="rounded-xl border border-gray-100 dark:border-gray-800 divide-y divide-gray-100 dark:divide-gray-800 px-4">
                     <InfoRow icon={ShieldCheck} label="Times Verified" value={certDetail.verification_count} />
-                    <InfoRow icon={Clock} label="Last Verified" value={certDetail.last_verified_at ? new Date(certDetail.last_verified_at).toLocaleString() : 'Never'} />
+                    <InfoRow icon={Clock} label="Last Verified" value={certDetail.last_verified_at ? formatDateTime(certDetail.last_verified_at) : 'Never'} />
                     <InfoRow icon={User} label="Issued By" value={certDetail.issued_by_name} />
                     <InfoRow icon={Eye} label="Public" value={certDetail.is_publicly_shareable ? 'Yes' : 'No'} />
                   </div>

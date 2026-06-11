@@ -25,33 +25,33 @@ class CertificateController extends Controller
                 ], 404);
             }
 
-            $certificates = Certificate::with('institution')
+            $certificates = Certificate::with(['institution', 'enrollment'])
                 ->where('student_id', $student->id)
                 ->orderBy('issue_date', 'desc')
                 ->get()
                 ->map(function ($cert) {
                     return [
-                        'id' => $cert->id,
-                        'serial' => $cert->serial,
-                        'degree_title' => $cert->degree_title,
-                        'program_name' => $cert->program_name,
-                        'major' => $cert->major,
-                        'registration_no' => $cert->registration_no,
-                        'cgpa' => $cert->cgpa,
-                        'issue_date' => $cert->issue_date,
-                        'completion_date' => $cert->completion_date,
-                        'institution_name' => $cert->institution?->name,
-                        'is_public' => $cert->is_publicly_shareable,
-                        'revoked_at' => $cert->revoked_at,
+                        'id'                => $cert->id,
+                        'serial'            => $cert->serial,
+                        'degree_title'      => $cert->certificate_name,
+                        'program_name'      => $cert->department,
+                        'major'             => $cert->major,
+                        'registration_no'   => $cert->enrollment?->enrollment_number,
+                        'cgpa'              => $cert->cgpa,
+                        'issue_date'        => $cert->issue_date,
+                        'completion_date'   => $cert->convocation_date,
+                        'institution_name'  => $cert->institution?->name,
+                        'is_public'         => $cert->is_publicly_shareable,
+                        'revoked_at'        => $cert->revoked_at,
                         'revocation_reason' => $cert->revocation_reason,
-                        'created_at' => $cert->created_at,
-                        'share_link' => $cert->share_link,
+                        'created_at'        => $cert->created_at,
+                        'share_link'        => $cert->share_link,
                     ];
                 });
 
             return response()->json([
                 'success' => true,
-                'certificates' => $certificates,
+                'data' => $certificates,
                 'total' => $certificates->count(),
             ], 200);
 
@@ -80,7 +80,7 @@ class CertificateController extends Controller
                 ], 404);
             }
 
-            $certificate = Certificate::with('institution')
+            $certificate = Certificate::with(['institution', 'enrollment'])
                 ->where('id', $id)
                 ->where('student_id', $student->id)
                 ->first();
@@ -93,21 +93,23 @@ class CertificateController extends Controller
             }
 
             return response()->json([
-                'success' => true,
-                'certificate' => [
-                    'id' => $certificate->id,
-                    'serial' => $certificate->serial,
-                    'degree_title' => $certificate->degree_title,
-                    'program_name' => $certificate->program_name,
-                    'major' => $certificate->major,
-                    'registration_no' => $certificate->registration_no,
-                    'cgpa' => $certificate->cgpa,
-                    'issue_date' => $certificate->issue_date,
-                    'completion_date' => $certificate->completion_date,
-                    'institution_name' => $certificate->institution?->name,
-                    'is_public' => $certificate->is_publicly_shareable,
-                    'revoked_at' => $certificate->revoked_at,
-                    'share_link' => $certificate->share_link,
+                'success'     => true,
+                'message'     => 'Certificate retrieved successfully',
+                'data' => [
+                    'id'                => $certificate->id,
+                    'serial'            => $certificate->serial,
+                    'degree_title'      => $certificate->certificate_name,
+                    'program_name'      => $certificate->department,
+                    'major'             => $certificate->major,
+                    'registration_no'   => $certificate->enrollment?->enrollment_number,
+                    'cgpa'              => $certificate->cgpa,
+                    'issue_date'        => $certificate->issue_date,
+                    'completion_date'   => $certificate->convocation_date,
+                    'institution_name'  => $certificate->institution?->name,
+                    'is_public'         => $certificate->is_publicly_shareable,
+                    'revoked_at'        => $certificate->revoked_at,
+                    'revocation_reason' => $certificate->revocation_reason,
+                    'share_link'        => $certificate->share_link,
                 ]
             ], 200);
 

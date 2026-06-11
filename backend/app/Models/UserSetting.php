@@ -52,7 +52,7 @@ class UserSetting extends Model
                 'frequency' => 'instant',
             ],
             'privacy' => [
-                'certificate_default' => 'public',
+                'certificate_default' => 'private',
                 'show_phone_to_verifiers' => false,
                 'allow_university_search' => true,
             ],

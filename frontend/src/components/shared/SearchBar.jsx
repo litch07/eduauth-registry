@@ -1,10 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, Loader2 } from 'lucide-react';
+import { Search, Loader2, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../services/api';
+import { cn } from '../../utils/helpers';
 
-export default function SearchBar() {
-  const [query, setQuery] = useState('');
+export default function SearchBar({ value, onChange, placeholder = "Search certificates...", onClear, className = '' }) {
+  const isControlled = value !== undefined;
+  const [internalQuery, setInternalQuery] = useState('');
+  const query = isControlled ? value : internalQuery;
+  const setQuery = isControlled ? onChange : setInternalQuery;
+
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
@@ -22,6 +27,8 @@ export default function SearchBar() {
   }, []);
 
   useEffect(() => {
+    if (isControlled) return; 
+
     const fetchResults = async () => {
       if (!query.trim()) {
         setResults([]);
@@ -35,7 +42,7 @@ export default function SearchBar() {
         const { data } = await api.get('/certificates/search', {
           params: { search: query, per_page: 5 }
         });
-        setResults(data.results.data || []);
+        setResults(data.results?.data || []);
       } catch (error) {
         console.error('Search failed:', error);
       } finally {
@@ -48,73 +55,86 @@ export default function SearchBar() {
     }, 500);
 
     return () => clearTimeout(timerId);
-  }, [query]);
+  }, [query, isControlled]);
 
   const handleSearchSubmit = (e) => {
     e.preventDefault();
-    if (query.trim()) {
+    if (query.trim() && !isControlled) {
       setIsOpen(false);
       navigate(`/search?q=${encodeURIComponent(query)}`);
     }
   };
 
+  const handleClear = () => {
+    setQuery('');
+    if (onClear) onClear();
+    setResults([]);
+    setIsOpen(false);
+  };
+
   return (
-    <div ref={wrapperRef} className="relative w-full max-w-md">
-      <form onSubmit={handleSearchSubmit} className="relative">
-        <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-          <Search className="h-4 w-4 text-gray-400" />
+    <div ref={wrapperRef} className={cn("relative w-full max-w-md", className)}>
+      <form onSubmit={handleSearchSubmit} className="relative flex items-center">
+        <div className="absolute left-3 flex items-center text-[var(--text-muted)]">
+          <Search className="h-4 w-4" />
         </div>
         <input
           type="text"
-          value={query}
+          value={query || ''}
           onChange={(e) => setQuery(e.target.value)}
           onFocus={() => {
-            if (query.trim()) setIsOpen(true);
+            if (query.trim() && !isControlled) setIsOpen(true);
           }}
-          className="block w-full rounded-lg border border-gray-200 bg-gray-50 py-2 pl-10 pr-3 text-sm text-gray-900 placeholder-gray-500 focus:border-primary-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder-gray-400 dark:focus:border-primary-500 dark:focus:bg-gray-900"
-          placeholder="Search certificates..."
+          className={cn(
+            "h-[40px] w-full rounded-[8px] border border-[var(--border)] bg-[var(--bg-elevated)] pl-9 pr-9 text-[14px] text-[var(--text-primary)] outline-none transition-all placeholder-[var(--text-muted)]",
+            "focus:border-[var(--brand)] focus:bg-[var(--bg-surface)] focus:shadow-[0_0_0_3px_rgba(99,102,241,0.12)]"
+          )}
+          placeholder={placeholder}
         />
-        {loading && (
-          <div className="absolute inset-y-0 right-0 flex items-center pr-3">
-            <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
-          </div>
+        {query && (
+          <button
+            type="button"
+            onClick={handleClear}
+            className="absolute right-3 flex items-center text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+          >
+            <X className="h-4 w-4" />
+          </button>
         )}
       </form>
 
-      {isOpen && (query.trim() !== '') && (
-        <div className="absolute mt-1 w-full overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-900 z-50">
+      {isOpen && !isControlled && (query.trim() !== '') && (
+        <div className="absolute mt-1 w-full overflow-hidden rounded-[8px] border border-[var(--border)] bg-[var(--bg-surface)] shadow-[var(--shadow-lg)] z-50">
           <div className="max-h-64 overflow-y-auto">
             {results.length > 0 ? (
               <div className="py-2">
-                <p className="px-4 py-1 text-xs font-semibold text-gray-500 dark:text-gray-400">Certificates</p>
+                <p className="px-4 py-1 text-xs font-semibold text-[var(--text-secondary)]">Certificates</p>
                 {results.map((cert) => (
                   <button
                     key={cert.id}
                     onClick={() => {
                       setIsOpen(false);
-                      // Navigate to certificate page depending on role, or verify page
                       navigate(`/verify?serial=${cert.serial}`);
                     }}
-                    className="w-full px-4 py-2 text-left hover:bg-gray-50 dark:hover:bg-gray-800 flex flex-col"
+                    className="w-full px-4 py-2 text-left hover:bg-[var(--bg-elevated)] flex flex-col"
                   >
-                    <span className="text-sm font-medium text-gray-900 dark:text-white">{cert.certificate_name}</span>
-                    <span className="text-xs text-gray-500 dark:text-gray-400">Serial: {cert.serial}</span>
+                    <span className="text-sm font-medium text-[var(--text-primary)]">{cert.certificate_name}</span>
+                    <span className="text-xs text-[var(--text-muted)]">Serial: {cert.serial}</span>
                   </button>
                 ))}
               </div>
             ) : !loading && (
-              <div className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400 text-center">
+              <div className="px-4 py-3 text-sm text-[var(--text-muted)] text-center">
                 No results found.
               </div>
             )}
           </div>
-          <div className="border-t border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50">
+          <div className="border-t border-[var(--border)] bg-[var(--bg-elevated)]">
             <button
               onClick={() => {
                 setIsOpen(false);
                 navigate(`/search?q=${encodeURIComponent(query)}`);
               }}
-              className="w-full px-4 py-3 text-sm font-medium text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300 text-center transition-colors"
+              className="w-full px-4 py-3 text-sm font-medium text-[var(--brand)] hover:text-[var(--brand-hover)] text-center transition-colors"
             >
               See all results for "{query}"
             </button>

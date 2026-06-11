@@ -16,6 +16,7 @@ use App\Models\Verifier;
 use App\Models\VerificationLog;
 use App\Models\VerifierAccess;
 use App\Notifications\AppNotification;
+use App\Services\EncryptionService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
@@ -25,31 +26,35 @@ class UserController extends Controller
 {
     public function dashboard()
     {
-        $totalUsers = User::whereNull('deleted_at')->count();
-        $pendingApprovals = User::where('is_approved', false)
-            ->whereNull('deleted_at')
-            ->whereIn('role', ['student', 'university', 'verifier'])
-            ->count();
-        $totalCertificates = \App\Models\Certificate::whereNull('deleted_at')->count();
-        $totalActivity = ActivityLog::count();
-        $pendingProfileChanges = \App\Models\ProfileChangeRequest::where('status', 'pending')->count();
-        $totalUniversities = User::where('role', 'university')->whereNull('deleted_at')->count();
-        $totalStudents = User::where('role', 'student')->whereNull('deleted_at')->count();
-        $activityToday = ActivityLog::whereDate('created_at', today())->count();
-        $recentVerifications = \App\Models\VerificationLog::where('verified_at', '>=', now()->subDays(7))->count();
+        $stats = cache()->remember('dashboard_admin_stats', 60, function () {
+            $totalUsers        = User::whereNull('deleted_at')->count();
+            $pendingApprovals  = User::where('is_approved', false)
+                ->whereNull('deleted_at')
+                ->whereIn('role', ['student', 'university', 'verifier'])
+                ->count();
+            $totalCertificates = \App\Models\Certificate::whereNull('deleted_at')->count();
+            $totalActivity     = ActivityLog::count();
+            $pendingProfileChanges = \App\Models\ProfileChangeRequest::where('status', 'pending')->count();
+            $totalUniversities = User::where('role', 'university')->whereNull('deleted_at')->count();
+            $totalStudents     = User::where('role', 'student')->whereNull('deleted_at')->count();
+            $activityToday     = ActivityLog::whereDate('created_at', today())->count();
+            $recentVerifications = \App\Models\VerificationLog::where('verified_at', '>=', now()->subDays(7))->count();
+
+            return [
+                'total_users'            => $totalUsers,
+                'pending_approvals'      => $pendingApprovals,
+                'total_certificates'     => $totalCertificates,
+                'total_activity'         => $totalActivity,
+                'pending_profile_changes'=> $pendingProfileChanges,
+                'total_universities'     => $totalUniversities,
+                'total_students'         => $totalStudents,
+                'activity_today'         => $activityToday,
+                'recent_verifications'   => $recentVerifications,
+            ];
+        });
 
         return response()->json([
-            'stats' => [
-                'total_users' => $totalUsers,
-                'pending_approvals' => $pendingApprovals,
-                'total_certificates' => $totalCertificates,
-                'total_activity' => $totalActivity,
-                'pending_profile_changes' => $pendingProfileChanges,
-                'total_universities' => $totalUniversities,
-                'total_students' => $totalStudents,
-                'activity_today' => $activityToday,
-                'recent_verifications' => $recentVerifications,
-            ],
+            'stats' => $stats,
         ]);
     }
 
@@ -191,23 +196,135 @@ class UserController extends Controller
         ]);
     }
 
+    public function suspendUser(Request $request, $id)
+    {
+        $validator = Validator::make($request->all(), [
+            'reason' => 'required|string|max:1000',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        $user = User::find($id);
+
+        if (!$user) {
+            return response()->json(['error' => 'User not found.'], 404);
+        }
+
+        if ($user->role === 'admin') {
+            return response()->json(['error' => 'Cannot suspend an administrator.'], 403);
+        }
+
+        $user->forceFill([
+            'suspended_at' => now(),
+            'suspension_reason' => $request->reason,
+        ])->save();
+
+        ActivityLog::create([
+            'user_id' => $request->user()->id,
+            'action' => 'user_suspended',
+            'entity_type' => User::class,
+            'entity_id' => $user->id,
+            'description' => 'User suspended by administrator.',
+            'metadata' => [
+                'reason' => $request->reason,
+                'suspended_user_email' => $user->email,
+                'role' => $user->role,
+            ],
+            'ip_address' => $request->ip(),
+        ]);
+
+        try {
+            $user->notify(new AppNotification(
+                'ACCOUNT_SUSPENDED',
+                'Account Suspended',
+                'Your account has been suspended by an administrator. Reason: ' . $request->reason,
+                '/'
+            ));
+        } catch (\Throwable $throwable) {
+            \Log::error('Failed to send suspension notification', [
+                'user_id' => $user->id,
+                'error'   => $throwable->getMessage(),
+            ]);
+        }
+
+        return response()->json([
+            'message' => 'User suspended successfully.',
+        ]);
+    }
+
+    public function unsuspendUser(Request $request, $id)
+    {
+        $user = User::find($id);
+
+        if (!$user) {
+            return response()->json(['error' => 'User not found.'], 404);
+        }
+
+        if (is_null($user->suspended_at)) {
+            return response()->json(['error' => 'User is not suspended.'], 422);
+        }
+
+        $user->forceFill([
+            'suspended_at' => null,
+            'suspension_reason' => null,
+        ])->save();
+
+        ActivityLog::create([
+            'user_id' => $request->user()->id,
+            'action' => 'user_unsuspended',
+            'entity_type' => User::class,
+            'entity_id' => $user->id,
+            'description' => 'User unsuspended by administrator.',
+            'metadata' => [
+                'unsuspended_user_email' => $user->email,
+                'role' => $user->role,
+            ],
+            'ip_address' => $request->ip(),
+        ]);
+
+        try {
+            $user->notify(new AppNotification(
+                'ACCOUNT_UNSUSPENDED',
+                'Account Restored',
+                'Your account suspension has been lifted. You can now access your account.',
+                '/' . $user->role . '/dashboard'
+            ));
+        } catch (\Throwable $throwable) {
+            \Log::error('Failed to send unsuspension notification', [
+                'user_id' => $user->id,
+                'error'   => $throwable->getMessage(),
+            ]);
+        }
+
+        return response()->json([
+            'message' => 'User unsuspended successfully.',
+        ]);
+    }
+
     public function search(Request $request)
     {
         $search = $request->search;
         $perPage = $request->input('per_page', 5);
 
+        // HIGH-02: Add whereNull('deleted_at') and wrap all search conditions inside a
+        // where() closure so the soft-delete filter is not bypassed by orWhere chains.
         $users = User::with(['student', 'institution', 'verifier'])
-            ->where('email', 'like', "%{$search}%")
-            ->orWhere('role', 'like', "%{$search}%")
-            ->orWhereHas('student', function ($sq) use ($search) {
-                $sq->where('first_name', 'like', "%{$search}%")
-                   ->orWhere('last_name', 'like', "%{$search}%");
-            })
-            ->orWhereHas('institution', function ($iq) use ($search) {
-                $iq->where('name', 'like', "%{$search}%");
-            })
-            ->orWhereHas('verifier', function ($vq) use ($search) {
-                $vq->where('company_name', 'like', "%{$search}%");
+            ->whereNull('deleted_at')
+            ->where(function ($q) use ($search) {
+                $q->where('email', 'like', "%{$search}%")
+                  ->orWhere('role', 'like', "%{$search}%")
+                  ->orWhereHas('student', function ($sq) use ($search) {
+                      $sq->where('first_name', 'like', "%{$search}%")
+                         ->orWhere('last_name', 'like', "%{$search}%");
+                  })
+                  ->orWhereHas('institution', function ($iq) use ($search) {
+                      $iq->where('name', 'like', "%{$search}%");
+                  })
+                  ->orWhereHas('verifier', function ($vq) use ($search) {
+                      $vq->where('company_name', 'like', "%{$search}%");
+                  });
             })
             ->paginate($perPage);
 
@@ -276,8 +393,7 @@ class UserController extends Controller
                 $q->where('email', 'like', "%{$s}%")
                   ->orWhereHas('student', function ($sq) use ($s) {
                       $sq->where('first_name', 'like', "%{$s}%")
-                         ->orWhere('last_name', 'like', "%{$s}%")
-                         ->orWhere('student_id', 'like', "%{$s}%");
+                         ->orWhere('last_name', 'like', "%{$s}%");
                   })
                   ->orWhereHas('institution', function ($iq) use ($s) {
                       $iq->where('name', 'like', "%{$s}%");
@@ -307,6 +423,7 @@ class UserController extends Controller
                 'is_approved'      => $user->is_approved,
                 'email_verified_at'=> $user->email_verified_at?->toIso8601String(),
                 'created_at'       => $user->created_at?->toIso8601String(),
+                'suspended_at'     => $user->suspended_at?->toIso8601String(),
             ];
 
             if ($user->role === 'student' && $user->student) {
@@ -314,7 +431,6 @@ class UserController extends Controller
                     ->where('status', 'active')
                     ->with('institution')
                     ->first();
-                $base['student_id'] = $user->student->student_id;
                 $base['enrollment_institution'] = $activeEnrollment?->institution?->name;
                 $base['certificates_count'] = Certificate::where('student_id', $user->student->id)->count();
             } elseif ($user->role === 'university' && $user->institution) {
@@ -364,6 +480,8 @@ class UserController extends Controller
             'approved_by_name' => $user->approvedBy?->name,
             'email_verified_at'=> $user->email_verified_at?->toIso8601String(),
             'created_at'       => $user->created_at?->toIso8601String(),
+            'suspended_at'     => $user->suspended_at?->toIso8601String(),
+            'suspension_reason'=> $user->suspension_reason,
         ];
 
         if ($user->role === 'student' && $user->student) {
@@ -372,11 +490,15 @@ class UserController extends Controller
                 'first_name'    => $s->first_name,
                 'middle_name'   => $s->middle_name,
                 'last_name'     => $s->last_name,
+                'gender'        => $s->gender,
                 'date_of_birth' => $s->date_of_birth?->format('Y-m-d'),
-                'student_id'    => $s->student_id,
                 'phone'         => $s->phone,
                 'address'       => $s->address,
-                'nid_status'    => !empty($s->nid_hash) ? 'NID verified (hash only)' : 'Not Set',
+                'nid_display'   => $this->buildAdminNidDisplay($s),
+                'current_student_id' => $s->enrollments()
+                    ->where('status', 'active')
+                    ->first()
+                    ?->roll_number,
             ];
 
             // Enrollment info
@@ -391,17 +513,31 @@ class UserController extends Controller
                 'program'         => $e->program,
                 'batch'           => $e->batch,
                 'status'          => $e->status,
+                'roll_number'     => $e->roll_number,
                 'enrollment_date' => $e->enrollment_date?->format('Y-m-d'),
                 'expected_grad'   => $e->expected_graduation_date?->format('Y-m-d'),
             ]);
 
-            // Stats
-            $totalCerts = Certificate::where('student_id', $s->id)->count();
-            $publicCerts = Certificate::where('student_id', $s->id)->where('is_publicly_shareable', true)->count();
+            // Stats — single conditional aggregation replaces 3 separate COUNT queries
+            $certCounts = DB::table('certificates')
+                ->selectRaw('
+                    COUNT(*) as total,
+                    SUM(CASE WHEN is_publicly_shareable = 1 THEN 1 ELSE 0 END) as public_count,
+                    SUM(CASE WHEN revoked_at IS NOT NULL THEN 1 ELSE 0 END) as revoked_count
+                ')
+                ->where('student_id', $s->id)
+                ->whereNull('deleted_at')
+                ->first();
+
+            $totalCerts  = (int) ($certCounts->total ?? 0);
+            $publicCerts = (int) ($certCounts->public_count ?? 0);
+            $revokedCerts = (int) ($certCounts->revoked_count ?? 0);
+
             $data['stats'] = [
                 'total_certificates'  => $totalCerts,
                 'public_certificates' => $publicCerts,
                 'private_certificates'=> $totalCerts - $publicCerts,
+                'revoked_certificates'=> $revokedCerts,
                 'total_enrollments'   => $enrollments->count(),
                 'active_enrollments'  => $enrollments->where('status', 'active')->count(),
             ];
@@ -426,6 +562,7 @@ class UserController extends Controller
                 ->whereMonth('issue_date', now()->month)
                 ->whereYear('issue_date', now()->year)
                 ->count();
+            $revokedCertsIssued = Certificate::where('institution_id', $inst->id)->whereNotNull('revoked_at')->count();
 
             $data['stats'] = [
                 'total_enrolled'      => $enrollmentCounts->sum(),
@@ -434,6 +571,7 @@ class UserController extends Controller
                 'withdrawn'           => $enrollmentCounts->get('withdrawn', 0),
                 'total_certificates'  => $totalCertsIssued,
                 'certificates_month'  => $certsThisMonth,
+                'revoked_certificates'=> $revokedCertsIssued,
             ];
         } elseif ($user->role === 'verifier' && $user->verifier) {
             $v = $user->verifier;
@@ -458,7 +596,7 @@ class UserController extends Controller
             $activeAccess = VerifierAccess::where('verifier_id', $v->id)
                 ->active()
                 ->count();
-            $pendingRequests = CertificateAccessRequest::where('verifier_user_id', $user->id)
+            $pendingRequests = CertificateAccessRequest::where('verifier_id', $v->id)
                 ->where('status', 'pending')
                 ->count();
 
@@ -543,12 +681,13 @@ class UserController extends Controller
         $items = collect($paginated->items())->map(fn ($e) => [
             'id'                => $e->id,
             'student_name'      => $e->student?->full_name,
-            'student_id_number' => $e->student?->student_id,
+            'student_id_number' => $e->enrollment_number,
             'institution_name'  => $e->institution?->name,
             'enrollment_number' => $e->enrollment_number,
             'program'           => $e->program,
             'batch'             => $e->batch,
             'status'            => $e->status,
+            'roll_number'       => $e->roll_number,
             'enrollment_date'   => $e->enrollment_date?->format('Y-m-d'),
             'expected_grad'     => $e->expected_graduation_date?->format('Y-m-d'),
             'actual_grad'       => $e->actual_graduation_date?->format('Y-m-d'),
@@ -627,12 +766,13 @@ class UserController extends Controller
                 'revoked_at'          => $cert->revoked_at?->toIso8601String(),
                 'revocation_reason'   => $cert->revocation_reason,
                 'revoked_by_name'     => $cert->revokedBy?->name,
+                'revoked_by_role'     => $cert->revokedBy?->role,
                 'revocation_history'  => $cert->revocation_history ?? [],
                 'student'             => $cert->student ? [
                     'id'        => $cert->student->id,
                     'user_id'   => $cert->student->user_id,
                     'full_name' => $cert->student->full_name,
-                    'student_id'=> $cert->student->student_id,
+                    'student_id'=> $cert->enrollment?->enrollment_number,
                     'dob_masked'=> $cert->student->date_of_birth ? '••••-••-' . $cert->student->date_of_birth->format('d') : null,
                 ] : null,
                 'institution'         => $cert->institution ? [
@@ -691,5 +831,27 @@ class UserController extends Controller
         };
 
         return response()->stream($callback, 200, $headers);
+    }
+    /**
+     * Build the full (unmasked) NID display string for admin view.
+     *
+     * Admins see the complete decrypted NID. Legacy records show a
+     * clear message that the value cannot be recovered from the hash.
+     *
+     * @param \App\Models\Student $student
+     * @return string
+     */
+    private function buildAdminNidDisplay(Student $student): string
+    {
+        if (!empty($student->nid_encrypted)) {
+            $decrypted = EncryptionService::decryptNid($student->nid_encrypted);
+            return $decrypted; // Full NID for admin, no masking
+        }
+
+        if (!empty($student->nid_hash)) {
+            return 'NID on file (legacy hash only — full value not recoverable)';
+        }
+
+        return 'Not Set';
     }
 }

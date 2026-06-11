@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Mail\PendingEmailChangeMail;
 use App\Models\ActivityLog;
 use App\Models\Enrollment;
 use App\Models\Institution;
@@ -11,7 +12,9 @@ use App\Models\Verifier;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 
 class ProfileController extends Controller
 {
@@ -43,20 +46,26 @@ class ProfileController extends Controller
 
         $validated = $validator->validated();
 
+        // Detect if user is requesting an email change
+        $pendingEmailMessage = null;
+        $newEmail = $validated['email'] ?? null;
+        $isEmailChange = $newEmail && strtolower($newEmail) !== strtolower($user->email);
+
+        // Handle non-email profile fields inside the transaction
         DB::transaction(function () use ($user, $validated, $request) {
             if ($user->role === 'student' && $user->student) {
                 $user->student->forceFill([
-                    'phone' => $validated['phone'],
+                    'phone'   => $validated['phone'],
                     'address' => $validated['address'] ?? null,
                 ])->save();
             }
 
             if ($user->role === 'university' && $user->institution) {
                 $user->institution->forceFill([
-                    'phone' => $validated['phone'],
-                    'address' => $validated['address'],
-                    'website' => $validated['website'] ?? null,
-                    'default_authority_name' => $validated['default_authority_name'] ?? null,
+                    'phone'                   => $validated['phone'],
+                    'address'                 => $validated['address'],
+                    'website'                 => $validated['website'] ?? null,
+                    'default_authority_name'  => $validated['default_authority_name'] ?? null,
                     'default_authority_title' => $validated['default_authority_title'] ?? null,
                 ])->save();
             }
@@ -64,34 +73,85 @@ class ProfileController extends Controller
             if ($user->role === 'verifier' && $user->verifier) {
                 $user->verifier->forceFill([
                     'phone' => $validated['phone'],
-                    'website' => $validated['website'] ?? null,
-                ])->save();
-            }
-
-            if (isset($validated['email'])) {
-                $user->forceFill([
-                    'email' => $validated['email'],
                 ])->save();
             }
 
             ActivityLog::create([
-                'user_id' => $user->id,
-                'action' => 'profile_updated',
+                'user_id'     => $user->id,
+                'action'      => 'profile_updated',
                 'entity_type' => User::class,
-                'entity_id' => $user->id,
+                'entity_id'   => $user->id,
                 'description' => 'User profile updated.',
-                'metadata' => [
-                    'role' => $user->role,
-                ],
-                'ip_address' => $request->ip(),
+                'metadata'    => ['role' => $user->role],
+                'ip_address'  => $request->ip(),
+            ]);
+        });
+
+        // Handle email change separately (outside transaction — SMTP should not hold a DB lock)
+        if ($isEmailChange) {
+            $token = Str::random(64);
+
+            $user->forceFill([
+                'pending_email'            => $newEmail,
+                'pending_email_token'      => $token,
+                'pending_email_expires_at' => now()->addHours(24),
+            ])->save();
+
+            try {
+                Mail::to($newEmail)->send(new PendingEmailChangeMail(
+                    $user->name ?? $user->email,
+                    $token
+                ));
+            } catch (\Exception $mailException) {
+                \Log::error('Failed to send email change verification', [
+                    'user_id' => $user->id,
+                    'new_email' => $newEmail,
+                    'error' => $mailException->getMessage(),
+                ]);
+            }
+
+            $pendingEmailMessage = "A verification link has been sent to {$newEmail}. Your email will not change until you verify the new address.";
+        }
+
+        $freshUser = $request->user()->fresh()->load(['student', 'institution', 'verifier']);
+
+        $message = $pendingEmailMessage ?? 'Profile updated successfully.';
+
+        return response()->json([
+            'message'           => $message,
+            'email_change_pending' => $isEmailChange,
+            'user'              => $this->formatUser($freshUser),
+            'profile'           => $this->formatProfile($freshUser),
+        ]);
+    }
+
+    public function cancelEmailChange(Request $request)
+    {
+        $user = $request->user();
+
+        DB::transaction(function () use ($user, $request) {
+            $user->forceFill([
+                'pending_email'            => null,
+                'pending_email_token'      => null,
+                'pending_email_expires_at' => null,
+            ])->save();
+
+            ActivityLog::create([
+                'user_id'     => $user->id,
+                'action'      => 'email_change_cancelled',
+                'entity_type' => User::class,
+                'entity_id'   => $user->id,
+                'description' => 'Pending email change cancelled by user.',
+                'metadata'    => ['role' => $user->role],
+                'ip_address'  => $request->ip(),
             ]);
         });
 
         $freshUser = $request->user()->fresh()->load(['student', 'institution', 'verifier']);
 
         return response()->json([
-            'message' => 'Profile updated successfully.',
-            'user' => $this->formatUser($freshUser),
+            'message' => 'Email change cancelled.',
+            'user'    => $this->formatUser($freshUser),
             'profile' => $this->formatProfile($freshUser),
         ]);
     }
@@ -162,27 +222,31 @@ class ProfileController extends Controller
 
     private function rulesForRole(string $role, ?int $userId = null): array
     {
+        // Email validation: must be valid and unique among OTHER users.
+        // If it matches the current user's email, the change is ignored.
+        // If it differs, it triggers the pending-email-change flow.
+        $emailRule = 'nullable|email|max:255|unique:users,email,' . $userId;
+
         return match ($role) {
             'admin' => [
-                'email' => 'required|email|max:255|unique:users,email,' . $userId,
+                'email' => $emailRule,
             ],
             'student' => [
-                'email' => 'required|email|max:255|unique:users,email,' . $userId,
-                'phone' => 'required|string|max:30',
+                'email'   => $emailRule,
+                'phone'   => 'required|string|max:30',
                 'address' => 'nullable|string|max:1000',
             ],
             'university' => [
-                'email' => 'required|email|max:255|unique:users,email,' . $userId,
-                'phone' => 'required|string|max:30',
-                'address' => 'required|string|max:1000',
-                'website' => 'nullable|url|max:255',
-                'default_authority_name' => 'nullable|string|max:255',
+                'email'                   => $emailRule,
+                'phone'                   => 'required|string|max:30',
+                'address'                 => 'required|string|max:1000',
+                'website'                 => 'nullable|url|max:255',
+                'default_authority_name'  => 'nullable|string|max:255',
                 'default_authority_title' => 'nullable|string|max:255',
             ],
             'verifier' => [
-                'email' => 'required|email|max:255|unique:users,email,' . $userId,
+                'email' => $emailRule,
                 'phone' => 'required|string|max:30',
-                'website' => 'nullable|url|max:255',
             ],
             default => [],
         };
@@ -191,15 +255,16 @@ class ProfileController extends Controller
     private function formatUser(User $user): array
     {
         return [
-            'id' => $user->id,
-            'email' => $user->email,
-            'role' => $user->role,
-            'name' => $this->displayName($user),
-            'is_approved' => $user->is_approved,
+            'id'                => $user->id,
+            'email'             => $user->email,
+            'role'              => $user->role,
+            'name'              => $this->displayName($user),
+            'is_approved'       => $user->is_approved,
             'email_verified_at' => $user->email_verified_at,
-            'student' => $user->student,
-            'institution' => $user->institution,
-            'verifier' => $user->verifier,
+            'pending_email'     => $user->pending_email,
+            'student'           => $user->student,
+            'institution'       => $user->institution,
+            'verifier'          => $user->verifier,
         ];
     }
 
@@ -207,18 +272,19 @@ class ProfileController extends Controller
     {
         return match ($user->role) {
             'student' => [
-                'type' => 'student',
-                'name' => $this->displayName($user),
-                'first_name' => $user->student?->first_name,
-                'middle_name' => $user->student?->middle_name,
-                'last_name' => $user->student?->last_name,
-                'date_of_birth' => $user->student?->date_of_birth?->toDateString(),
-                'nid_hash' => $user->student?->nid_hash ? 'NID on file (not displayable)' : null,
-                'phone' => $user->student?->phone,
-                'address' => $user->student?->address,
-                'student_id' => $user->student?->student_id,
-                'email' => $user->email,
+                'type'               => 'student',
+                'name'               => $this->displayName($user),
+                'first_name'         => $user->student?->first_name,
+                'middle_name'        => $user->student?->middle_name,
+                'last_name'          => $user->student?->last_name,
+                'date_of_birth'      => $user->student?->date_of_birth?->toDateString(),
+                'nid_display'        => $this->buildStudentNidDisplay($user->student),
+                'phone'              => $user->student?->phone,
+                'address'            => $user->student?->address,
+                'email'              => $user->email,
+                'pending_email'      => $user->pending_email,
                 'current_enrollment' => $this->getCurrentEnrollment($user),
+                'enrollment_history' => $this->getEnrollmentHistory($user),
             ],
             'university' => [
                 'type' => 'university',
@@ -280,6 +346,43 @@ class ProfileController extends Controller
         return $user->email;
     }
 
+    /**
+     * Build the masked NID display string for a student's own profile view.
+     *
+     * Students see only the last 4 characters of their NID.
+     * Legacy records (nid_encrypted is null) show a fallback message.
+     *
+     * @param \App\Models\Student|null $student
+     * @return string|null
+     */
+    private function buildStudentNidDisplay(?object $student): ?string
+    {
+        if (!$student) {
+            return null;
+        }
+
+        // New record: nid_encrypted exists — decrypt and mask
+        if (!empty($student->nid_encrypted)) {
+            $decrypted = \App\Services\EncryptionService::decryptNid($student->nid_encrypted);
+
+            // If decryption succeeded, mask all but last 4 chars
+            if ($decrypted !== '[Encrypted]') {
+                $last4 = substr($decrypted, -4);
+                return '****-****-' . $last4;
+            }
+
+            // Decryption failed (shouldn't happen with correct APP_KEY)
+            return '[Encrypted]';
+        }
+
+        // Legacy record: has nid_hash only, NID is not recoverable
+        if (!empty($student->nid_hash)) {
+            return 'NID on file (legacy — not displayable)';
+        }
+
+        return null;
+    }
+
     private function splitName(string $name): array
     {
         $parts = preg_split('/\s+/', trim($name)) ?: [];
@@ -307,7 +410,7 @@ class ProfileController extends Controller
 
         $enrollment = Enrollment::where('student_id', $user->student->id)
             ->whereIn('status', ['active', 'withdrawal_requested'])
-            ->with('institution')
+            ->with(['institution', 'department', 'major'])
             ->first();
 
         if (!$enrollment) {
@@ -318,11 +421,48 @@ class ProfileController extends Controller
             'id' => $enrollment->id,
             'institution_name' => $enrollment->institution->name,
             'enrollment_number' => $enrollment->enrollment_number,
+            'roll_number' => $enrollment->roll_number,
+            'department' => $enrollment->department?->name,
+            'major' => $enrollment->major?->name,
             'program' => $enrollment->program,
             'batch' => $enrollment->batch,
             'enrollment_date' => $enrollment->enrollment_date?->toDateString(),
             'expected_graduation_date' => $enrollment->expected_graduation_date?->toDateString(),
             'status' => $enrollment->status,
         ];
+    }
+
+    private function getEnrollmentHistory(User $user): array
+    {
+        if ($user->role !== 'student' || !$user->student) {
+            return [];
+        }
+
+        $enrollments = Enrollment::where('student_id', $user->student->id)
+            ->whereIn('status', ['graduated', 'withdrawn'])
+            ->with(['institution', 'department', 'major', 'certificates'])
+            ->orderByRaw('COALESCE(actual_graduation_date, updated_at) DESC')
+            ->get();
+
+        return $enrollments->map(function ($enrollment) {
+            return [
+                'id' => $enrollment->id,
+                'institution_name' => $enrollment->institution->name,
+                'department' => $enrollment->department?->name,
+                'major' => $enrollment->major?->name,
+                'program' => $enrollment->program,
+                'batch' => $enrollment->batch,
+                'enrollment_date' => $enrollment->enrollment_date?->toDateString(),
+                'end_date' => $enrollment->actual_graduation_date?->toDateString() ?? $enrollment->updated_at->toDateString(),
+                'status' => $enrollment->status,
+                'certificates' => $enrollment->certificates->map(function ($cert) {
+                    return [
+                        'id' => $cert->id,
+                        'serial' => $cert->serial,
+                        'is_public' => $cert->is_publicly_shareable,
+                    ];
+                }),
+            ];
+        })->toArray();
     }
 }

@@ -1,33 +1,49 @@
+import React from 'react';
 import { Dialog, DialogPanel, DialogTitle } from '@headlessui/react';
 import { X } from 'lucide-react';
+import Button from './Button';
+import { cn } from '../../utils/helpers';
 
-export default function Modal({ open, onClose, title, children, size = 'md' }) {
-  const widthClass = {
+export default function Modal({ isOpen, open, onClose, title, size = 'md', children, footer }) {
+  const actualIsOpen = isOpen !== undefined ? isOpen : open;
+  
+  const sizes = {
     sm: 'max-w-md',
-    md: 'max-w-2xl',
-    lg: 'max-w-4xl',
-  }[size];
+    md: 'max-w-lg',
+    lg: 'max-w-2xl',
+    xl: 'max-w-4xl',
+  };
 
   return (
-    <Dialog open={open} onClose={onClose} className="relative z-50">
-      <div className="fixed inset-0 bg-black/40 backdrop-blur-sm transition-opacity" aria-hidden="true" />
-      <div className="fixed inset-0 flex items-center justify-center p-4 sm:p-6 z-50">
-        <DialogPanel className={`w-full ${widthClass} max-h-[90vh] md:max-h-[85vh] overflow-y-auto rounded-2xl bg-white p-4 sm:p-6 shadow-2xl dark:bg-gray-800 relative flex flex-col`}>
-          <button
-            onClick={onClose}
-            className="absolute right-3 top-3 sm:right-4 sm:top-4 flex h-10 w-10 sm:h-8 sm:w-8 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-500 dark:hover:bg-gray-700 dark:hover:text-gray-300 transition-colors"
-            aria-label="Close modal"
-          >
-            <X className="h-5 w-5 sm:h-4 sm:w-4" />
-          </button>
-          {title ? (
-            <div className="sticky top-0 z-10 bg-white dark:bg-gray-800 pb-4 mb-2 sm:mb-4 border-b border-gray-100 dark:border-gray-700">
-              <DialogTitle className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-white pr-10">
+    <Dialog open={actualIsOpen} onClose={onClose} className="relative z-50">
+      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" aria-hidden="true" />
+      <div className="fixed inset-0 flex items-center justify-center p-4">
+        <DialogPanel className={cn(
+          "w-full bg-[var(--bg-surface)] rounded-[16px] shadow-[var(--shadow-lg)] max-h-[90vh] flex flex-col relative",
+          sizes[size]
+        )}>
+          {title && (
+            <div className="flex items-center justify-between border-b border-[var(--border)] px-[24px] py-[20px]">
+              <DialogTitle className="text-base font-semibold text-[var(--text-primary)] pr-8">
                 {title}
               </DialogTitle>
             </div>
-          ) : null}
-          <div className="flex-1 overflow-y-auto">{children}</div>
+          )}
+          
+          <div className="absolute right-4 top-4 z-10">
+            <Button variant="ghost" size="sm" onClick={onClose} className="!p-1 h-auto text-[var(--text-muted)] hover:text-[var(--text-primary)]">
+              <X className="h-5 w-5" />
+            </Button>
+          </div>
+
+          <div className="overflow-y-auto p-[24px]">
+            {children}
+          </div>
+          {footer && (
+            <div className="flex justify-end gap-2 border-t border-[var(--border)] px-[24px] py-[16px]">
+              {footer}
+            </div>
+          )}
         </DialogPanel>
       </div>
     </Dialog>

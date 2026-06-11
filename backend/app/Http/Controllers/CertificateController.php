@@ -30,7 +30,14 @@ class CertificateController extends Controller
     {
         $certificate = Certificate::findOrFail($id);
 
-        // Block PDF download for revoked certificates
+        // HIGH-12: Authorization must be checked FIRST to prevent information leakage
+        // (an unauthorized user must not be able to probe whether a certificate is revoked
+        // by observing different error messages).
+        if (Gate::denies('view-certificate-pdf', $certificate)) {
+            return response()->json(['error' => 'Unauthorized'], 403);
+        }
+
+        // Block PDF download for revoked certificates (only after authorization passes)
         if ($certificate->isRevoked()) {
             return response()->json([
                 'error' => 'This certificate has been revoked and cannot be downloaded.',
@@ -39,29 +46,47 @@ class CertificateController extends Controller
             ], 403);
         }
 
-        // Authorization: Student who owns it, university that issued it, or verifier with access
-        if (Gate::denies('view-certificate-pdf', $certificate)) {
-            return response()->json(['error' => 'Unauthorized'], 403);
-        }
-
         return $this->certificateService->getCertificatePdf($id);
     }
 
     public function index(Request $request)
     {
-        $certificates = Certificate::with(['student.user', 'institution'])
+        $user = $request->user();
+
+        // Role-based access control
+        if ($user->role === 'verifier') {
+            return response()->json(['error' => 'Unauthorized'], 403);
+        }
+
+        if ($user->role === 'university') {
+            return response()->json(['error' => 'Unauthorized'], 403);
+        }
+
+        $query = Certificate::with(['student.user', 'institution']);
+
+        // Students may only see their own certificates
+        if ($user->role === 'student') {
+            if (!$user->student) {
+                return response()->json(['success' => true, 'certificates' => []]);
+            }
+            $query->where('student_id', $user->student->id);
+        }
+        // Admins see all certificates — no additional scope needed
+
+        $certificates = $query
             ->orderBy('issue_date', 'desc')
             ->get()
             ->map(function ($cert) {
                 return [
-                    'id' => $cert->id,
-                    'serial' => $cert->serial,
-                    'student_name' => $cert->student?->user?->name ?? 'N/A',
-                    'institution_name' => $cert->institution?->name ?? 'N/A',
-                    'certificate_name' => $cert->certificate_name,
-                    'issue_date' => $cert->issue_date,
-                    'revoked_at' => $cert->revoked_at,
-                    'revocation_reason' => $cert->revocation_reason,
+                    'id'                 => $cert->id,
+                    'serial'             => $cert->serial,
+                    'student_name'       => $cert->student?->user?->name ?? 'N/A',
+                    'institution_name'   => $cert->institution?->name ?? 'N/A',
+                    'certificate_name'   => $cert->certificate_name,
+                    'issue_date'         => $cert->issue_date,
+                    'revoked_at'         => $cert->revoked_at,
+                    'revoked_by_role'    => $cert->revoked_by_role,
+                    'revocation_reason'  => $cert->revocation_reason,
                     'revocation_history' => $cert->revocation_history ?? [],
                 ];
             });
@@ -94,7 +119,10 @@ class CertificateController extends Controller
             return response()->json(['error' => 'Certificate is already revoked.'], 422);
         }
 
-        $user = Auth::user();
+        // HIGH-11: Load the authenticated user with profile relationships so that
+        // the ->name accessor (which reads student/institution/verifier) returns
+        // the correct value and does not trigger N+1 queries.
+        $user = Auth::user()->load(['student', 'institution', 'verifier']);
 
         // Authorization Rule: The user must be a global admin, OR 
         // they must be a university account whose institution ID matches the certificate's issuing institution.
@@ -107,8 +135,9 @@ class CertificateController extends Controller
         ]);
 
         $certificate->update([
-            'revoked_at' => now(),
-            'revoked_by' => $user->id,
+            'revoked_at'        => now(),
+            'revoked_by'        => $user->id,
+            'revoked_by_role'   => $user->role,
             'revocation_reason' => $request->reason,
         ]);
 
@@ -134,9 +163,20 @@ class CertificateController extends Controller
         ]);
 
         // Notify student
-        Mail::to($certificate->student->user->email)->queue(new CertificateRevokedMail($certificate, $certificate->student->user));
+        if ($certificate->student?->user) {
+            Mail::to($certificate->student->user->email)->queue(new CertificateRevokedMail($certificate, $certificate->student->user));
+        }
 
-        return response()->json(['message' => 'Certificate revoked successfully.']);
+        return response()->json([
+            'success' => true,
+            'message' => 'Certificate revoked successfully.',
+            'data'    => [
+                'id'               => $certificate->id,
+                'serial'           => $certificate->serial,
+                'revoked_at'       => $certificate->revoked_at,
+                'revocation_reason'=> $certificate->revocation_reason,
+            ],
+        ]);
     }
 
     /**
@@ -152,7 +192,13 @@ class CertificateController extends Controller
     public function searchCertificates(Request $request)
     {
         $user = $request->user();
-        
+
+        // HIGH-04: Verifiers must use the dedicated verifier endpoint (/verifier/accessible-students).
+        // Allowing verifiers here would expose all certificates in the system with no scoping.
+        if ($user->role === 'verifier') {
+            return response()->json(['error' => 'Unauthorized. Use the verifier-specific endpoint.'], 403);
+        }
+
         // Start with base query, eagerly loading relationships to prevent N+1 queries
         $query = Certificate::with(['student.user', 'institution']);
 
@@ -168,7 +214,6 @@ class CertificateController extends Controller
             $q->where(function ($subQ) use ($search) {
                 $subQ->where('serial', 'like', "%{$search}%")
                     ->orWhere('certificate_name', 'like', "%{$search}%")
-                    ->orWhere('degree_title', 'like', "%{$search}%")
                     // Search inside the nested relationship (Certificate -> Student -> User)
                     ->orWhereHas('student.user', function ($studentQ) use ($search) {
                         $studentQ->where('name', 'like', "%{$search}%");

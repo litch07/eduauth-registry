@@ -59,4 +59,9 @@ class Institution extends Model
         return $this->hasMany(EnrollmentApplication::class);
     }
 
+    public function certificateLevels()
+    {
+        return $this->hasMany(CertificateLevel::class);
+    }
+
 }

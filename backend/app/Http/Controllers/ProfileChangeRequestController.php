@@ -18,7 +18,7 @@ class ProfileChangeRequestController extends Controller
     private const APPROVABLE_FIELDS = [
         'student' => ['email', 'first_name', 'middle_name', 'last_name', 'date_of_birth', 'nid'],
         'university' => ['email', 'name', 'registration_number'],
-        'verifier' => ['email', 'company_name'],
+        'verifier' => ['email', 'company_name', 'website'],
     ];
 
     /**
@@ -34,6 +34,7 @@ class ProfileChangeRequestController extends Controller
         'name' => 'Institution Name',
         'registration_number' => 'Registration Number',
         'company_name' => 'Company Name',
+        'website' => 'Company Link / Website',
     ];
 
     /**
@@ -219,6 +220,7 @@ class ProfileChangeRequestController extends Controller
             'name' => $user->institution?->name,
             'registration_number' => $user->institution?->registration_number,
             'company_name' => $user->verifier?->company_name,
+            'website' => $user->verifier?->website,
             default => null,
         };
     }

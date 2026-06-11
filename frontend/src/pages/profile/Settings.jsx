@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { useForm } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
 import * as yup from 'yup';
-import SettingsLayout from '../../components/layout/SettingsLayout';
+import DashboardLayout from '../../components/layout/DashboardLayout';
 import Card from '../../components/shared/Card';
 import Button from '../../components/shared/Button';
 import Input from '../../components/shared/Input';
@@ -23,74 +23,58 @@ import {
 } from 'lucide-react';
 import DepartmentsManager from '../../components/university/DepartmentsManager';
 
-// ─── Tab definitions per role ───────────────────────────────
-const commonTabs = [
-  { id: 'security', label: 'Account Security', icon: Shield },
+// ─── Tab definitions ───────────────────────────────
+const tabs = [
+  { id: 'general', label: 'General', icon: Settings2 },
   { id: 'notifications', label: 'Notifications', icon: Bell },
   { id: 'privacy', label: 'Privacy', icon: Eye },
-  { id: 'display', label: 'Display', icon: Monitor },
-  { id: 'activity', label: 'Activity Log', icon: Activity },
-  { id: 'danger', label: 'Account Ownership', icon: AlertTriangle },
+  { id: 'security', label: 'Security', icon: Shield },
 ];
-
-const roleTabs = {
-  student:    [{ id: 'role_prefs', label: 'Certificate & Enrollment', icon: GraduationCap }],
-  university: [{ id: 'role_prefs', label: 'Institution Preferences', icon: Building2 }],
-  verifier:   [{ id: 'role_prefs', label: 'Verification Preferences', icon: Search }],
-  admin:      [{ id: 'role_prefs', label: 'System Preferences', icon: Settings2 }],
-};
 
 // ─── Password schema ───
 const passwordSchema = yup.object().shape({
-  current_password:          yup.string().required('Current password is required.'),
-  new_password:              yup.string().min(8, 'New password must be at least 8 characters.').required('New password is required.'),
+  current_password: yup.string().required('Current password is required.'),
+  new_password: yup.string().min(8, 'New password must be at least 8 characters.').required('New password is required.'),
   new_password_confirmation: yup.string().oneOf([yup.ref('new_password'), null], 'Password confirmation does not match.').required('Please confirm your new password.'),
 });
 
 // ─── Main component ────────────────────────────────────────
 export default function Settings() {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const { theme, setTheme } = useTheme();
   const [searchParams, setSearchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState(() => {
-    return searchParams.get('tab') || 'security';
+    return searchParams.get('tab') || 'general';
   });
 
   useEffect(() => {
     const tab = searchParams.get('tab');
-    if (tab && ['security', 'notifications', 'privacy', 'display', 'activity', 'danger', 'role_prefs'].includes(tab)) {
+    if (tab && ['general', 'notifications', 'privacy', 'security'].includes(tab)) {
       setActiveTab(tab);
     }
   }, [searchParams]);
 
-  const [settings, setSettings]           = useState(null);
-  const [account, setAccount]             = useState(null);
-  const [loading, setLoading]             = useState(true);
-  const [saveStatus, setSaveStatus]       = useState('idle'); // idle | saving | saved
-  const [activities, setActivities]       = useState([]);
+  const [settings, setSettings] = useState(null);
+  const [account, setAccount] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [saveStatus, setSaveStatus] = useState('idle'); // idle | saving | saved
+  const [activities, setActivities] = useState([]);
   const [activitiesLoading, setActivitiesLoading] = useState(false);
-  const [page, setPage]                   = useState(1);
-  const [showResetModal, setShowResetModal]       = useState(false);
+  const [page, setPage] = useState(1);
+  const [showResetModal, setShowResetModal] = useState(false);
   const [showDeactivateModal, setShowDeactivateModal] = useState(false);
 
   // ─── Preferences tab: local draft state (manual save) ──
-  const [prefsDraft, setPrefsDraft]       = useState(null);
+  const [prefsDraft, setPrefsDraft] = useState(null);
   const [authorityDraft, setAuthorityDraft] = useState({
-    default_authority_name:  '',
+    default_authority_name: '',
     default_authority_title: '',
   });
-  const [prefsSaving, setPrefsSaving]     = useState(false);
+  const [prefsSaving, setPrefsSaving] = useState(false);
 
-  const pageSize   = 5;
+  const pageSize = 5;
   const debounceRef = useRef(null);
-
-  const tabs = useMemo(() => {
-    const extra  = roleTabs[user?.role] || [];
-    const copy   = [...commonTabs];
-    const actIdx = copy.findIndex((t) => t.id === 'activity');
-    copy.splice(actIdx, 0, ...extra);
-    return copy;
-  }, [user?.role]);
 
   // ─── Load settings ──────────────────────────────
   useEffect(() => {
@@ -117,7 +101,7 @@ export default function Settings() {
       try {
         const { data } = await api.get('/profile');
         setAuthorityDraft({
-          default_authority_name:  data.profile?.default_authority_name  ?? '',
+          default_authority_name: data.profile?.default_authority_name ?? '',
           default_authority_title: data.profile?.default_authority_title ?? '',
         });
       } catch {
@@ -129,7 +113,7 @@ export default function Settings() {
 
   // ─── Load activity log when tab selected ────────
   useEffect(() => {
-    if (activeTab !== 'activity') return;
+    if (activeTab !== 'security') return;
     const loadActivity = async () => {
       setActivitiesLoading(true);
       try {
@@ -144,7 +128,7 @@ export default function Settings() {
     loadActivity();
   }, [activeTab]);
 
-  const totalPages     = Math.max(1, Math.ceil(activities.length / pageSize));
+  const totalPages = Math.max(1, Math.ceil(activities.length / pageSize));
   const pagedActivities = useMemo(
     () => activities.slice((page - 1) * pageSize, page * pageSize),
     [activities, page],
@@ -194,10 +178,10 @@ export default function Settings() {
     try {
       // Extract only role-relevant preference keys from the draft
       const roleKey = {
-        student:    ['certificate_preferences', 'enrollment_preferences', 'profile_privacy'],
+        student: ['certificate_preferences', 'enrollment_preferences', 'profile_privacy'],
         university: ['institution_preferences', 'enrollment_settings'],
-        verifier:   ['verification_preferences', 'access_request_settings'],
-        admin:      ['system_preferences'],
+        verifier: ['verification_preferences', 'access_request_settings'],
+        admin: ['system_preferences'],
       }[user?.role] ?? [];
 
       const partial = {};
@@ -210,8 +194,8 @@ export default function Settings() {
       // University: also persist authority fields to institutions table via profile API
       if (user?.role === 'university') {
         promises.push(
-          api.put('/profile', {
-            default_authority_name:  authorityDraft.default_authority_name,
+          api.put('/university/settings/authority', {
+            default_authority_name: authorityDraft.default_authority_name,
             default_authority_title: authorityDraft.default_authority_title,
           }),
         );
@@ -253,8 +237,8 @@ export default function Settings() {
   const submitPassword = async (data) => {
     try {
       await api.put('/profile/password', {
-        current_password:          data.current_password,
-        new_password:              data.new_password,
+        current_password: data.current_password,
+        new_password: data.new_password,
         new_password_confirmation: data.new_password_confirmation,
       });
       resetPassword({ current_password: '', new_password: '', new_password_confirmation: '' });
@@ -271,18 +255,18 @@ export default function Settings() {
   // ─── Loading state ──────────────────────────────
   if (loading) {
     return (
-      <SettingsLayout>
+      <DashboardLayout>
         <div className="flex min-h-[50vh] items-center justify-center">
           <LoadingSpinner />
         </div>
-      </SettingsLayout>
+      </DashboardLayout>
     );
   }
 
   // ─── Render ─────────────────────────────────────
   return (
-    <SettingsLayout>
-      <div className="space-y-6">
+    <DashboardLayout>
+      <div className="space-y-6 max-w-5xl mx-auto">
         {/* Header */}
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -310,448 +294,431 @@ export default function Settings() {
           </div>
         </div>
 
-        {/* Layout: sidebar + content */}
-        <div className="grid gap-6 lg:grid-cols-[240px_1fr]">
-          {/* Sidebar (desktop) / scrollable tabs (mobile) */}
-          <nav className="lg:space-y-1 flex gap-1.5 overflow-x-auto pb-2 lg:flex-col lg:overflow-visible lg:pb-0">
+        {/* Layout: Horizontal tabs */}
+        <div className="border-b border-gray-200 dark:border-gray-800">
+          <nav className="-mb-px flex gap-6 overflow-x-auto" aria-label="Tabs">
             {tabs.map((tab) => {
-              const Icon     = tab.icon;
-              const isDanger = tab.id === 'danger';
+              const Icon = tab.icon;
               return (
                 <button
                   key={tab.id}
                   onClick={() => { setActiveTab(tab.id); setSearchParams({ tab: tab.id }); setPage(1); }}
                   className={`
-                    flex items-center gap-2.5 whitespace-nowrap rounded-lg px-3 py-2.5 text-sm font-medium transition
+                    flex items-center gap-2 whitespace-nowrap border-b-2 py-4 px-1 text-sm font-medium transition
                     ${activeTab === tab.id
-                      ? isDanger
-                        ? 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400'
-                        : 'bg-primary-50 text-primary-700 dark:bg-primary-900/20 dark:text-primary-400'
-                      : isDanger
-                        ? 'text-red-500 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/10'
-                        : 'text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800'
+                      ? 'border-primary-500 text-primary-600 dark:text-primary-400'
+                      : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:border-gray-600 dark:hover:text-gray-300'
                     }
                   `}
                 >
                   <Icon className="h-4 w-4 shrink-0" />
-                  <span className="hidden sm:inline">{tab.label}</span>
+                  {tab.label}
                 </button>
               );
             })}
           </nav>
+        </div>
 
-          {/* Content area */}
-          <div className="min-w-0 space-y-6">
+        {/* Content area */}
+        <div className="min-w-0 space-y-6 mt-6">
 
-            {/* ─── Account Security ─── */}
-            {activeTab === 'security' && (
-              <>
-                {/* Account info */}
-                <Card>
-                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Account Information</h2>
-                  <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                    <InfoRow label="Email"          value={account?.email} />
-                    <InfoRow label="Role"           value={account?.role?.charAt(0).toUpperCase() + account?.role?.slice(1)} />
-                    <InfoRow label="Status"         value={account?.is_approved ? 'Approved' : 'Pending Approval'} />
-                    <InfoRow label="Email Verified" value={account?.email_verified_at ? formatDate(account.email_verified_at) : 'Not verified'} />
-                    <InfoRow label="Member Since"   value={account?.created_at ? formatDate(account.created_at) : '-'} />
-                  </div>
-                </Card>
-
-                {/* Password change */}
-                <Card>
-                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                    <Lock className="h-5 w-5 text-gray-400" />
-                    Change Password
-                  </h2>
-                  <form className="mt-6 space-y-4" onSubmit={handleSubmitPassword(submitPassword)}>
-                    <Input label="Current Password"      type="password" {...registerPassword('current_password')}          error={passwordErrors.current_password?.message} />
-                    <Input label="New Password"          type="password" {...registerPassword('new_password')}              error={passwordErrors.new_password?.message} />
-                    <Input label="Confirm New Password"  type="password" {...registerPassword('new_password_confirmation')} error={passwordErrors.new_password_confirmation?.message} />
-                    <Button type="submit" loading={isUpdatingPassword}>
-                      Update Password
+          {/* ─── General ─── */}
+          {activeTab === 'general' && (
+            <>
+              {/* Role-specific Preferences */}
+              {prefsDraft && (
+                <div className="space-y-6">
+                  {user?.role === 'student' && (
+                    <StudentPreferences draft={prefsDraft} updateDraft={updatePrefsDraft} />
+                  )}
+                  {user?.role === 'university' && (
+                    <UniversityPreferences
+                      draft={prefsDraft}
+                      updateDraft={updatePrefsDraft}
+                      authorityDraft={authorityDraft}
+                      setAuthorityDraft={setAuthorityDraft}
+                    />
+                  )}
+                  {user?.role === 'verifier' && (
+                    <VerifierPreferences draft={prefsDraft} updateDraft={updatePrefsDraft} />
+                  )}
+                  {user?.role === 'admin' && (
+                    <AdminPreferences draft={prefsDraft} updateDraft={updatePrefsDraft} />
+                  )}
+                  <div className="flex items-center justify-end gap-3 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/50">
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Changes to preferences are not saved automatically.</p>
+                    <Button onClick={handleSavePreferences} loading={prefsSaving} className="gap-2">
+                      <Save className="h-4 w-4" />
+                      Save Preferences
                     </Button>
-                  </form>
-                </Card>
-              </>
-            )}
+                  </div>
+                </div>
+              )}
 
-            {/* ─── Notifications ─── */}
-            {activeTab === 'notifications' && settings && (
-              <>
+              {/* Display Preferences */}
+              {settings && (
                 <Card>
                   <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                    <Mail className="h-5 w-5 text-gray-400" />
-                    Email Notifications
+                    <Monitor className="h-5 w-5 text-gray-400" />
+                    Display Preferences
                   </h2>
-                  <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Choose which emails you receive.</p>
-                  <div className="mt-4 divide-y divide-gray-100 dark:divide-gray-800">
-                    <ToggleSwitch label="Certificate Issued"       description="Receive emails when a new certificate is issued to you"   checked={settings.notifications?.email?.certificate_issued   ?? true} onChange={(v) => updateSetting('notifications.email.certificate_issued', v)} />
-                    <ToggleSwitch label="Enrollment Changes"       description="Enrollment status updates and graduation notices"         checked={settings.notifications?.email?.enrollment_changes   ?? true} onChange={(v) => updateSetting('notifications.email.enrollment_changes', v)} />
-                    <ToggleSwitch label="Access Requests"          description="When a verifier requests access to your certificates"     checked={settings.notifications?.email?.access_requests      ?? true} onChange={(v) => updateSetting('notifications.email.access_requests', v)} />
-                    <ToggleSwitch label="Profile Change Updates"   description="Status updates on profile change requests"               checked={settings.notifications?.email?.profile_changes      ?? true} onChange={(v) => updateSetting('notifications.email.profile_changes', v)} />
-                    <ToggleSwitch label="Security Alerts"          description="Login from new devices and password changes"             checked={settings.notifications?.email?.security_alerts      ?? true} onChange={(v) => updateSetting('notifications.email.security_alerts', v)} />
-                  </div>
-                </Card>
-
-                <Card>
-                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                    <Bell className="h-5 w-5 text-gray-400" />
-                    On-Site Notifications
-                  </h2>
-                  <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Control what shows up in your notification panel.</p>
-                  <div className="mt-4 divide-y divide-gray-100 dark:divide-gray-800">
-                    <ToggleSwitch label="Certificate Issued"     checked={settings.notifications?.in_app?.certificate_issued   ?? true} onChange={(v) => updateSetting('notifications.in_app.certificate_issued', v)} />
-                    <ToggleSwitch label="Enrollment Changes"     checked={settings.notifications?.in_app?.enrollment_changes   ?? true} onChange={(v) => updateSetting('notifications.in_app.enrollment_changes', v)} />
-                    <ToggleSwitch label="Access Requests"        checked={settings.notifications?.in_app?.access_requests      ?? true} onChange={(v) => updateSetting('notifications.in_app.access_requests', v)} />
-                    <ToggleSwitch label="Profile Change Updates" checked={settings.notifications?.in_app?.profile_changes      ?? true} onChange={(v) => updateSetting('notifications.in_app.profile_changes', v)} />
-                    <ToggleSwitch label="Security Alerts"        checked={settings.notifications?.in_app?.security_alerts      ?? true} onChange={(v) => updateSetting('notifications.in_app.security_alerts', v)} />
-                  </div>
-                </Card>
-              </>
-            )}
-
-            {/* ─── Privacy ─── */}
-            {activeTab === 'privacy' && settings && (
-              <Card>
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                  <Eye className="h-5 w-5 text-gray-400" />
-                  Privacy Settings
-                </h2>
-                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Control who can see your information.</p>
-                <div className="mt-4 divide-y divide-gray-100 dark:divide-gray-800">
-                  <div className="py-4">
-                    <h3 className="text-sm font-medium text-gray-900 dark:text-white mb-3">Profile Visibility</h3>
-                    <RadioGroup
-                      name="profile_visibility"
-                      value={settings.privacy?.profile_visibility || 'public'}
-                      onChange={(v) => updateSetting('privacy.profile_visibility', v)}
-                      options={[
-                        { value: 'public',  label: 'Public',  desc: 'Anyone can view your profile' },
-                        { value: 'private', label: 'Private', desc: 'Only you and admins can view' },
-                      ]}
-                    />
-                  </div>
-                  <div className="py-4">
-                    <h3 className="text-sm font-medium text-gray-900 dark:text-white mb-3">Default Certificate Visibility</h3>
-                    <RadioGroup
-                      name="certificate_default"
-                      value={settings.privacy?.certificate_default || 'public'}
-                      onChange={(v) => updateSetting('privacy.certificate_default', v)}
-                      options={[
-                        { value: 'public',  label: 'Public',  desc: 'Verifiable by anyone' },
-                        { value: 'private', label: 'Private', desc: 'Requires your approval' },
-                      ]}
-                    />
-                  </div>
-                  <ToggleSwitch label="Show Email to Verifiers" description="Allow verifiers to see your email address"  checked={settings.privacy?.show_email_to_verifiers ?? false} onChange={(v) => updateSetting('privacy.show_email_to_verifiers', v)} />
-                  <ToggleSwitch label="Show Phone to Verifiers" description="Allow verifiers to see your phone number"  checked={settings.privacy?.show_phone_to_verifiers ?? false} onChange={(v) => updateSetting('privacy.show_phone_to_verifiers', v)} />
-                  {user?.role === 'student' && (
-                    <>
-                      {/* ── Profile Privacy (student-only) ── */}
-                      <div className="mt-6 pt-6 border-t border-gray-100 dark:border-gray-800">
-                        <h3 className="text-sm font-semibold text-gray-900 dark:text-white flex items-center gap-2 mb-1">
-                          <UserX className="h-4 w-4 text-primary-500" />
-                          Profile Privacy
-                        </h3>
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
-                          Control who can find you and what verifiers can see about your profile.
-                        </p>
-
-                        {/* Profile Visibility dropdown */}
-                        <div className="mb-4">
-                          <SelectField
-                            label="Profile Visibility"
-                            value={settings.profile_visibility || 'verifiers_only'}
-                            onChange={(v) => updateSetting('profile_visibility', v)}
-                            options={[
-                              { value: 'public',         label: 'Public — Anyone can view your profile' },
-                              { value: 'verifiers_only', label: 'Verifiers Only — Only approved verifiers can view your profile' },
-                              { value: 'private',        label: 'Private — Only you and admins can view your profile' },
-                            ]}
-                          />
-                          <p className="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
-                            {settings.profile_visibility === 'public' &&
-                              'Your name, institution, and basic details are visible to everyone — including unauthenticated visitors.'}
-                            {(settings.profile_visibility === 'verifiers_only' || !settings.profile_visibility) &&
-                              'Only approved verifiers who are logged in can view your profile. The general public cannot access it.'}
-                            {settings.profile_visibility === 'private' &&
-                              'Your profile is completely hidden from verifiers. Only platform administrators retain access.'}
-                          </p>
-                        </div>
-
-                        {/* Hidden-from-search banner */}
-                        <ProfilePrivacyBanner
-                          hidden={!(settings.allow_verifier_search ?? true)}
-                        />
-
-                        {/* Toggles */}
-                        <div className="divide-y divide-gray-100 dark:divide-gray-800">
-                          <ToggleSwitch
-                            label="Allow verifiers to find me in search"
-                            description="When off, verifiers cannot discover you by searching your student ID, NID, or email — they can only reach you via a direct link you share."
-                            checked={settings.allow_verifier_search ?? true}
-                            onChange={(v) => updateSetting('allow_verifier_search', v)}
-                          />
-                          <ToggleSwitch
-                            label="Show my email to verifiers who access my profile"
-                            description="When on, verifiers who view your profile or see you in search results will be able to see your email address."
-                            checked={settings.show_email_to_verifiers ?? false}
-                            onChange={(v) => updateSetting('show_email_to_verifiers', v)}
-                          />
-                          <ToggleSwitch
-                            label="Show my current institution publicly"
-                            description="When on, the name of your enrolled institution is displayed on your profile. Turn off to keep your academic affiliation private."
-                            checked={settings.show_institution_to_public ?? true}
-                            onChange={(v) => updateSetting('show_institution_to_public', v)}
-                          />
-                        </div>
+                  <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Customize how the application looks.</p>
+                  <div className="mt-6 space-y-6">
+                    {/* Theme selector */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-900 dark:text-white mb-3">Theme</label>
+                      <div className="grid grid-cols-3 gap-3">
+                        {[
+                          { value: 'light', label: 'Light', emoji: '☀️' },
+                          { value: 'dark', label: 'Dark', emoji: '🌙' },
+                          { value: 'system', label: 'System', emoji: '💻' },
+                        ].map((opt) => (
+                          <button
+                            key={opt.value}
+                            onClick={() => {
+                              setTheme(opt.value);
+                              updateSetting('display.theme', opt.value);
+                            }}
+                            className={`flex flex-col items-center gap-2 rounded-xl border-2 px-4 py-3 text-sm font-medium transition ${theme === opt.value
+                                ? 'border-primary-500 bg-primary-50 text-primary-700 dark:bg-primary-900/20 dark:text-primary-400 shadow-sm'
+                                : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:border-gray-600'
+                              }`}
+                          >
+                            <span className="text-xl">{opt.emoji}</span>
+                            {opt.label}
+                          </button>
+                        ))}
                       </div>
-                    </>
-                  )}
+                    </div>
 
-                  {user?.role === 'student' && (
-                    <ToggleSwitch
-                      label="Allow Universities to Search Me"
-                      description="Let universities find you by name or NID for enrollment"
-                      checked={settings.privacy?.allow_university_search ?? true}
-                      onChange={(v) => updateSetting('privacy.allow_university_search', v)}
+                    <SelectField
+                      label="Date Format"
+                      value={settings.display?.date_format || 'DD/MM/YYYY'}
+                      onChange={(v) => updateSetting('display.date_format', v)}
+                      options={[
+                        { value: 'DD/MM/YYYY', label: 'DD/MM/YYYY (31/12/2026)' },
+                        { value: 'MM/DD/YYYY', label: 'MM/DD/YYYY (12/31/2026)' },
+                        { value: 'YYYY-MM-DD', label: 'YYYY-MM-DD (2026-12-31)' },
+                      ]}
                     />
-                  )}
+
+                    <SelectField
+                      label="Timezone"
+                      value={settings.display?.timezone || 'Asia/Dhaka'}
+                      onChange={(v) => updateSetting('display.timezone', v)}
+                      options={[
+                        { value: 'Asia/Dhaka', label: 'Asia/Dhaka (UTC+6)' },
+                        { value: 'Asia/Kolkata', label: 'Asia/Kolkata (UTC+5:30)' },
+                        { value: 'UTC', label: 'UTC (UTC+0)' },
+                        { value: 'America/New_York', label: 'America/New_York (UTC-5)' },
+                        { value: 'Europe/London', label: 'Europe/London (UTC+0)' },
+                      ]}
+                    />
+
+                    <SelectField
+                      label="Items Per Page"
+                      description="Default number of items shown in paginated lists"
+                      value={String(settings.display?.items_per_page || 25)}
+                      onChange={(v) => updateSetting('display.items_per_page', parseInt(v, 10))}
+                      options={[
+                        { value: '10', label: '10 items' },
+                        { value: '25', label: '25 items' },
+                        { value: '50', label: '50 items' },
+                        { value: '100', label: '100 items' },
+                      ]}
+                    />
+                  </div>
+                </Card>
+              )}
+            </>
+          )}
+
+          {/* ─── Security ─── */}
+          {activeTab === 'security' && (
+            <>
+              {/* Account info */}
+              <Card>
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Account Information</h2>
+                <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                  <InfoRow label="Email" value={account?.email} />
+                  <InfoRow label="Role" value={account?.role?.charAt(0).toUpperCase() + account?.role?.slice(1)} />
+                  <InfoRow label="Status" value={account?.is_approved ? 'Approved' : 'Pending Approval'} />
+                  <InfoRow label="Email Verified" value={account?.email_verified_at ? formatDate(account.email_verified_at) : 'Not verified'} />
+                  <InfoRow label="Member Since" value={account?.created_at ? formatDate(account.created_at) : '-'} />
                 </div>
               </Card>
-            )}
 
-            {/* ─── Display ─── */}
-            {activeTab === 'display' && settings && (
+              {/* Password change */}
               <Card>
                 <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                  <Monitor className="h-5 w-5 text-gray-400" />
-                  Display Preferences
+                  <Lock className="h-5 w-5 text-gray-400" />
+                  Change Password
                 </h2>
-                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Customize how the application looks.</p>
-                <div className="mt-6 space-y-6">
-                  {/* Theme selector */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-900 dark:text-white mb-3">Theme</label>
-                    <div className="grid grid-cols-3 gap-3">
-                      {[
-                        { value: 'light',  label: 'Light',  emoji: '☀️' },
-                        { value: 'dark',   label: 'Dark',   emoji: '🌙' },
-                        { value: 'system', label: 'System', emoji: '💻' },
-                      ].map((opt) => (
-                        <button
-                          key={opt.value}
-                          onClick={() => {
-                            setTheme(opt.value);
-                            updateSetting('display.theme', opt.value);
-                          }}
-                          className={`flex flex-col items-center gap-2 rounded-xl border-2 px-4 py-3 text-sm font-medium transition ${
-                            theme === opt.value
-                              ? 'border-primary-500 bg-primary-50 text-primary-700 dark:bg-primary-900/20 dark:text-primary-400 shadow-sm'
-                              : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:border-gray-600'
-                          }`}
-                        >
-                          <span className="text-xl">{opt.emoji}</span>
-                          {opt.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <SelectField
-                    label="Date Format"
-                    value={settings.display?.date_format || 'DD/MM/YYYY'}
-                    onChange={(v) => updateSetting('display.date_format', v)}
-                    options={[
-                      { value: 'DD/MM/YYYY', label: 'DD/MM/YYYY (31/12/2026)' },
-                      { value: 'MM/DD/YYYY', label: 'MM/DD/YYYY (12/31/2026)' },
-                      { value: 'YYYY-MM-DD', label: 'YYYY-MM-DD (2026-12-31)' },
-                    ]}
-                  />
-
-                  <SelectField
-                    label="Timezone"
-                    value={settings.display?.timezone || 'Asia/Dhaka'}
-                    onChange={(v) => updateSetting('display.timezone', v)}
-                    options={[
-                      { value: 'Asia/Dhaka',        label: 'Asia/Dhaka (UTC+6)' },
-                      { value: 'Asia/Kolkata',       label: 'Asia/Kolkata (UTC+5:30)' },
-                      { value: 'UTC',                label: 'UTC (UTC+0)' },
-                      { value: 'America/New_York',   label: 'America/New_York (UTC-5)' },
-                      { value: 'Europe/London',      label: 'Europe/London (UTC+0)' },
-                    ]}
-                  />
-
-                  <SelectField
-                    label="Items Per Page"
-                    description="Default number of items shown in paginated lists"
-                    value={String(settings.display?.items_per_page || 25)}
-                    onChange={(v) => updateSetting('display.items_per_page', parseInt(v, 10))}
-                    options={[
-                      { value: '10',  label: '10 items' },
-                      { value: '25',  label: '25 items' },
-                      { value: '50',  label: '50 items' },
-                      { value: '100', label: '100 items' },
-                    ]}
-                  />
-                </div>
-              </Card>
-            )}
-
-            {/* ─── Role-specific Preferences (manual save) ─── */}
-            {activeTab === 'role_prefs' && prefsDraft && (
-              <>
-                {user?.role === 'student' && (
-                  <StudentPreferences
-                    draft={prefsDraft}
-                    updateDraft={updatePrefsDraft}
-                  />
-                )}
-                {user?.role === 'university' && (
-                  <UniversityPreferences
-                    draft={prefsDraft}
-                    updateDraft={updatePrefsDraft}
-                    authorityDraft={authorityDraft}
-                    setAuthorityDraft={setAuthorityDraft}
-                  />
-                )}
-                {user?.role === 'verifier' && (
-                  <VerifierPreferences
-                    draft={prefsDraft}
-                    updateDraft={updatePrefsDraft}
-                  />
-                )}
-                {user?.role === 'admin' && (
-                  <AdminPreferences
-                    draft={prefsDraft}
-                    updateDraft={updatePrefsDraft}
-                  />
-                )}
-
-                {/* ── Save Preferences button ── */}
-                <div className="flex items-center justify-end gap-3 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/50">
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Changes are not saved automatically in this tab.</p>
-                  <Button
-                    onClick={handleSavePreferences}
-                    loading={prefsSaving}
-                    className="gap-2"
-                  >
-                    <Save className="h-4 w-4" />
-                    Save Preferences
+                <form className="mt-6 space-y-4" onSubmit={handleSubmitPassword(submitPassword)}>
+                  <Input label="Current Password" type="password" {...registerPassword('current_password')} error={passwordErrors.current_password?.message} />
+                  <Input label="New Password" type="password" {...registerPassword('new_password')} error={passwordErrors.new_password?.message} />
+                  <Input label="Confirm New Password" type="password" {...registerPassword('new_password_confirmation')} error={passwordErrors.new_password_confirmation?.message} />
+                  <Button type="submit" loading={isUpdatingPassword}>
+                    Update Password
                   </Button>
-                </div>
-              </>
-            )}
+                </form>
+              </Card>
+            </>
+          )}
 
-            {/* ─── Activity Log ─── */}
-            {activeTab === 'activity' && (
+          {/* ─── Notifications ─── */}
+          {activeTab === 'notifications' && settings && (
+            <>
               <Card>
                 <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                  <Activity className="h-5 w-5 text-gray-400" />
-                  Activity Log
+                  <Mail className="h-5 w-5 text-gray-400" />
+                  Email Notifications
                 </h2>
-                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Recent account activity and security events.</p>
-                {activitiesLoading ? (
-                  <div className="mt-6 flex min-h-[20vh] items-center justify-center">
-                    <LoadingSpinner />
-                  </div>
-                ) : activities.length === 0 ? (
-                  <p className="mt-6 text-sm text-gray-500 dark:text-gray-400">No account activity yet.</p>
-                ) : (
+                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Choose which emails you receive.</p>
+                <div className="mt-4 divide-y divide-gray-100 dark:divide-gray-800">
+                  <ToggleSwitch label="Certificate Issued" description="Receive emails when a new certificate is issued to you" checked={settings.notifications?.email?.certificate_issued ?? true} onChange={(v) => updateSetting('notifications.email.certificate_issued', v)} />
+                  <ToggleSwitch label="Enrollment Changes" description="Enrollment status updates and graduation notices" checked={settings.notifications?.email?.enrollment_changes ?? true} onChange={(v) => updateSetting('notifications.email.enrollment_changes', v)} />
+                  <ToggleSwitch label="Access Requests" description="When a verifier requests access to your certificates" checked={settings.notifications?.email?.access_requests ?? true} onChange={(v) => updateSetting('notifications.email.access_requests', v)} />
+                  <ToggleSwitch label="Profile Change Updates" description="Status updates on profile change requests" checked={settings.notifications?.email?.profile_changes ?? true} onChange={(v) => updateSetting('notifications.email.profile_changes', v)} />
+                  <ToggleSwitch label="Security Alerts" description="Login from new devices and password changes" checked={settings.notifications?.email?.security_alerts ?? true} onChange={(v) => updateSetting('notifications.email.security_alerts', v)} />
+                </div>
+              </Card>
+
+              <Card>
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                  <Bell className="h-5 w-5 text-gray-400" />
+                  On-Site Notifications
+                </h2>
+                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Control what shows up in your notification panel.</p>
+                <div className="mt-4 divide-y divide-gray-100 dark:divide-gray-800">
+                  <ToggleSwitch label="Certificate Issued" checked={settings.notifications?.in_app?.certificate_issued ?? true} onChange={(v) => updateSetting('notifications.in_app.certificate_issued', v)} />
+                  <ToggleSwitch label="Enrollment Changes" checked={settings.notifications?.in_app?.enrollment_changes ?? true} onChange={(v) => updateSetting('notifications.in_app.enrollment_changes', v)} />
+                  <ToggleSwitch label="Access Requests" checked={settings.notifications?.in_app?.access_requests ?? true} onChange={(v) => updateSetting('notifications.in_app.access_requests', v)} />
+                  <ToggleSwitch label="Profile Change Updates" checked={settings.notifications?.in_app?.profile_changes ?? true} onChange={(v) => updateSetting('notifications.in_app.profile_changes', v)} />
+                  <ToggleSwitch label="Security Alerts" checked={settings.notifications?.in_app?.security_alerts ?? true} onChange={(v) => updateSetting('notifications.in_app.security_alerts', v)} />
+                </div>
+              </Card>
+            </>
+          )}
+
+          {/* ─── Privacy ─── */}
+          {activeTab === 'privacy' && settings && (
+            <Card>
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                <Eye className="h-5 w-5 text-gray-400" />
+                Privacy Settings
+              </h2>
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Control who can see your information.</p>
+              <div className="mt-4 divide-y divide-gray-100 dark:divide-gray-800">
+                <div className="py-4">
+                  <h3 className="text-sm font-medium text-gray-900 dark:text-white mb-3">Profile Visibility</h3>
+                  <RadioGroup
+                    name="profile_visibility"
+                    value={settings.privacy?.profile_visibility || 'public'}
+                    onChange={(v) => updateSetting('privacy.profile_visibility', v)}
+                    options={[
+                      { value: 'public', label: 'Public', desc: 'Anyone can view your profile' },
+                      { value: 'private', label: 'Private', desc: 'Only you and admins can view' },
+                    ]}
+                  />
+                </div>
+                <div className="py-4">
+                  <h3 className="text-sm font-medium text-gray-900 dark:text-white mb-3">Default Certificate Visibility</h3>
+                  <RadioGroup
+                    name="certificate_default"
+                    value={settings.privacy?.certificate_default || 'public'}
+                    onChange={(v) => updateSetting('privacy.certificate_default', v)}
+                    options={[
+                      { value: 'public', label: 'Public', desc: 'Verifiable by anyone' },
+                      { value: 'private', label: 'Private', desc: 'Requires your approval' },
+                    ]}
+                  />
+                </div>
+                <ToggleSwitch label="Show Email to Verifiers" description="Allow verifiers to see your email address" checked={settings.privacy?.show_email_to_verifiers ?? false} onChange={(v) => updateSetting('privacy.show_email_to_verifiers', v)} />
+                <ToggleSwitch label="Show Phone to Verifiers" description="Allow verifiers to see your phone number" checked={settings.privacy?.show_phone_to_verifiers ?? false} onChange={(v) => updateSetting('privacy.show_phone_to_verifiers', v)} />
+                {user?.role === 'student' && (
                   <>
-                    <div className="mt-6 overflow-x-auto">
-                      <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                        <thead>
-                          <tr className="text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                            <th className="py-3 pr-4">Action</th>
-                            <th className="py-3 pr-4">Description</th>
-                            <th className="py-3 pr-4">Date</th>
-                            <th className="py-3">IP</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-100 text-sm dark:divide-gray-800">
-                          {pagedActivities.map((activity) => (
-                            <tr key={activity.id}>
-                              <td className="py-3 pr-4 font-medium text-gray-800 dark:text-gray-200">{activity.action}</td>
-                              <td className="py-3 pr-4 text-gray-600 dark:text-gray-300">{activity.description}</td>
-                              <td className="py-3 pr-4 text-gray-600 dark:text-gray-300">{formatDate(activity.date)}</td>
-                              <td className="py-3 text-gray-600 dark:text-gray-300">{activity.ip_address || '-'}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                    <div className="mt-4 flex items-center justify-between">
-                      <p className="text-xs text-gray-500 dark:text-gray-400">Page {page} of {totalPages}</p>
-                      <div className="flex gap-2">
-                        <Button variant="secondary" onClick={() => setPage((p) => Math.max(1, p - 1))}         disabled={page <= 1}>Previous</Button>
-                        <Button variant="secondary" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages}>Next</Button>
+                    {/* ── Profile Privacy (student-only) ── */}
+                    <div className="mt-6 pt-6 border-t border-gray-100 dark:border-gray-800">
+                      <h3 className="text-sm font-semibold text-gray-900 dark:text-white flex items-center gap-2 mb-1">
+                        <UserX className="h-4 w-4 text-primary-500" />
+                        Profile Privacy
+                      </h3>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
+                        Control who can find you and what verifiers can see about your profile.
+                      </p>
+
+                      {/* Profile Visibility dropdown */}
+                      <div className="mb-4">
+                        <SelectField
+                          label="Profile Visibility"
+                          value={settings.profile_visibility || 'verifiers_only'}
+                          onChange={(v) => updateSetting('profile_visibility', v)}
+                          options={[
+                            { value: 'public', label: 'Public — Anyone can view your profile' },
+                            { value: 'verifiers_only', label: 'Verifiers Only — Only approved verifiers can view your profile' },
+                            { value: 'private', label: 'Private — Only you and admins can view your profile' },
+                          ]}
+                        />
+                        <p className="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                          {settings.profile_visibility === 'public' &&
+                            'Your name, institution, and basic details are visible to everyone — including unauthenticated visitors.'}
+                          {(settings.profile_visibility === 'verifiers_only' || !settings.profile_visibility) &&
+                            'Only approved verifiers who are logged in can view your profile. The general public cannot access it.'}
+                          {settings.profile_visibility === 'private' &&
+                            'Your profile is completely hidden from verifiers. Only platform administrators retain access.'}
+                        </p>
+                      </div>
+
+                      {/* Hidden-from-search banner */}
+                      <ProfilePrivacyBanner
+                        hidden={!(settings.allow_verifier_search ?? true)}
+                      />
+
+                      {/* Toggles */}
+                      <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                        <ToggleSwitch
+                          label="Allow verifiers to find me in search"
+                          description="When off, verifiers cannot discover you by searching your student ID, NID, or email — they can only reach you via a direct link you share."
+                          checked={settings.allow_verifier_search ?? true}
+                          onChange={(v) => updateSetting('allow_verifier_search', v)}
+                        />
+                        <ToggleSwitch
+                          label="Show my email to verifiers who access my profile"
+                          description="When on, verifiers who view your profile or see you in search results will be able to see your email address."
+                          checked={settings.show_email_to_verifiers ?? false}
+                          onChange={(v) => updateSetting('show_email_to_verifiers', v)}
+                        />
+                        <ToggleSwitch
+                          label="Show my current institution publicly"
+                          description="When on, the name of your enrolled institution is displayed on your profile. Turn off to keep your academic affiliation private."
+                          checked={settings.show_institution_to_public ?? true}
+                          onChange={(v) => updateSetting('show_institution_to_public', v)}
+                        />
                       </div>
                     </div>
                   </>
                 )}
-              </Card>
-            )}
 
-            {/* ─── Account Ownership ─── */}
-            {activeTab === 'danger' && (
-              <Card className="border-2 border-red-200 dark:border-red-900/50">
-                <h2 className="text-lg font-semibold text-red-700 dark:text-red-400 flex items-center gap-2">
-                  <AlertTriangle className="h-5 w-5" />
-                  Account Ownership
-                </h2>
-                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">These actions are irreversible. Proceed with caution.</p>
+                {user?.role === 'student' && (
+                  <ToggleSwitch
+                    label="Allow Universities to Search Me"
+                    description="Let universities find you by name or NID for enrollment"
+                    checked={settings.privacy?.allow_university_search ?? true}
+                    onChange={(v) => updateSetting('privacy.allow_university_search', v)}
+                  />
+                )}
+              </div>
+            </Card>
+          )}
 
-                <div className="mt-6 space-y-4">
-                  <div className="flex items-center justify-between rounded-lg border border-red-200 p-4 dark:border-red-900/50">
-                    <div>
-                      <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Deactivate Account</h3>
-                      <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Temporarily disable your account. You can reactivate later.</p>
-                    </div>
-                    <Button variant="danger" onClick={() => setShowDeactivateModal(true)} className="shrink-0">
-                      Deactivate
-                    </Button>
-                  </div>
-                  <div className="flex items-center justify-between rounded-lg border border-red-200 p-4 dark:border-red-900/50">
-                    <div>
-                      <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Delete Account</h3>
-                      <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Permanently delete your account and all data. This requires admin approval.</p>
-                    </div>
-                    <Button variant="danger" onClick={() => toast.error('Account deletion requires admin approval. Please contact support.')} className="shrink-0">
-                      Request Deletion
-                    </Button>
-                  </div>
+          {/* ─── Activity Log (Part of Security Tab) ─── */}
+          {activeTab === 'security' && (
+            <Card>
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                <Activity className="h-5 w-5 text-gray-400" />
+                Activity Log
+              </h2>
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Recent account activity and security events.</p>
+              {activitiesLoading ? (
+                <div className="mt-6 flex min-h-[20vh] items-center justify-center">
+                  <LoadingSpinner />
                 </div>
-              </Card>
-            )}
-          </div>
+              ) : activities.length === 0 ? (
+                <p className="mt-6 text-sm text-gray-500 dark:text-gray-400">No account activity yet.</p>
+              ) : (
+                <>
+                  <div className="mt-6 overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                      <thead>
+                        <tr className="text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                          <th className="py-3 pr-4">Action</th>
+                          <th className="py-3 pr-4">Description</th>
+                          <th className="py-3 pr-4">Date</th>
+                          <th className="py-3">IP</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100 text-sm dark:divide-gray-800">
+                        {pagedActivities.map((activity) => (
+                          <tr key={activity.id}>
+                            <td className="py-3 pr-4 font-medium text-gray-800 dark:text-gray-200">{activity.action}</td>
+                            <td className="py-3 pr-4 text-gray-600 dark:text-gray-300">{activity.description}</td>
+                            <td className="py-3 pr-4 text-gray-600 dark:text-gray-300">{formatDate(activity.date)}</td>
+                            <td className="py-3 text-gray-600 dark:text-gray-300">{activity.ip_address || '-'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="mt-4 flex items-center justify-between">
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Page {page} of {totalPages}</p>
+                    <div className="flex gap-2">
+                      <Button variant="secondary" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}>Previous</Button>
+                      <Button variant="secondary" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages}>Next</Button>
+                    </div>
+                  </div>
+                </>
+              )}
+            </Card>
+          )}
+
+          {/* ─── Account Ownership (Part of Security Tab) ─── */}
+          {activeTab === 'security' && (
+            <Card className="border-2 border-red-200 dark:border-red-900/50">
+              <h2 className="text-lg font-semibold text-red-700 dark:text-red-400 flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5" />
+                Account Ownership
+              </h2>
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">These actions are irreversible. Proceed with caution.</p>
+
+              <div className="mt-6 space-y-4">
+                <div className="flex items-center justify-between rounded-lg border border-red-200 p-4 dark:border-red-900/50">
+                  <div>
+                    <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Deactivate Account</h3>
+                    <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Temporarily disable your account. You can reactivate later.</p>
+                  </div>
+                  <Button variant="danger" onClick={() => setShowDeactivateModal(true)} className="shrink-0">
+                    Deactivate
+                  </Button>
+                </div>
+                <div className="flex items-center justify-between rounded-lg border border-red-200 p-4 dark:border-red-900/50">
+                  <div>
+                    <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Delete Account</h3>
+                    <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Permanently delete your account and all data. This requires admin approval.</p>
+                  </div>
+                  <Button variant="danger" onClick={() => toast.error('Account deletion requires admin approval. Please contact support.')} className="shrink-0">
+                    Request Deletion
+                  </Button>
+                </div>
+              </div>
+            </Card>
+          )}
         </div>
 
         {/* Modals */}
-        <ConfirmModal
-          isOpen={showResetModal}
-          onClose={() => setShowResetModal(false)}
-          onConfirm={handleReset}
-          title="Reset All Settings"
-          message="This will reset all your settings to their default values. This cannot be undone."
-          confirmText="Reset Settings"
-          variant="danger"
-        />
-        <ConfirmModal
-          isOpen={showDeactivateModal}
-          onClose={() => setShowDeactivateModal(false)}
-          onConfirm={() => {
-            setShowDeactivateModal(false);
-            toast.error('Account deactivation requires admin approval. Please contact support.');
-          }}
-          title="Deactivate Account"
-          message="Your account will be temporarily disabled. You will not be able to login until reactivated by an administrator."
-          confirmText="Deactivate"
-          variant="danger"
-        />
-      </div>
-    </SettingsLayout>
+      <ConfirmModal
+        isOpen={showResetModal}
+        onClose={() => setShowResetModal(false)}
+        onConfirm={handleReset}
+        title="Reset All Settings"
+        message="This will reset all your settings to their default values. This cannot be undone."
+        confirmText="Reset Settings"
+        variant="danger"
+      />
+      <ConfirmModal
+        isOpen={showDeactivateModal}
+        onClose={() => setShowDeactivateModal(false)}
+        onConfirm={() => {
+          setShowDeactivateModal(false);
+          toast.error('Account deactivation requires admin approval. Please contact support.');
+        }}
+        title="Deactivate Account"
+        message="Your account will be temporarily disabled. You will not be able to login until reactivated by an administrator."
+        confirmText="Deactivate"
+        variant="danger"
+      />
+    </div>
+    </DashboardLayout>
   );
 }
 
@@ -813,7 +780,7 @@ function StudentPreferences({ draft, updateDraft }) {
               value={draft.certificate_preferences?.default_visibility || 'private'}
               onChange={(v) => updateDraft('certificate_preferences.default_visibility', v)}
               options={[
-                { value: 'public',  label: 'Public',  desc: 'Verifiable by anyone' },
+                { value: 'public', label: 'Public', desc: 'Verifiable by anyone' },
                 { value: 'private', label: 'Private', desc: 'Requires your approval before access' },
               ]}
             />
@@ -836,7 +803,7 @@ function StudentPreferences({ draft, updateDraft }) {
               value={String(draft.certificate_preferences?.default_access_duration ?? 30)}
               onChange={(v) => updateDraft('certificate_preferences.default_access_duration', parseInt(v, 10))}
               options={[
-                { value: '7',  label: '7 days',  desc: 'Short-term access' },
+                { value: '7', label: '7 days', desc: 'Short-term access' },
                 { value: '30', label: '30 days', desc: 'Standard access' },
                 { value: '90', label: '90 days', desc: 'Extended access' },
               ]}
@@ -1026,8 +993,8 @@ function VerifierPreferences({ draft, updateDraft }) {
             onChange={(v) => updateDraft('verification_preferences.default_method', v)}
             options={[
               { value: 'manual', label: 'Manual — Enter serial & date of birth' },
-              { value: 'qr',     label: 'QR Code — Scan certificate QR code' },
-              { value: 'link',   label: 'Link — Use verification link' },
+              { value: 'qr', label: 'QR Code — Scan certificate QR code' },
+              { value: 'link', label: 'Link — Use verification link' },
             ]}
           />
         </div>
@@ -1046,9 +1013,9 @@ function VerifierPreferences({ draft, updateDraft }) {
             value={String(draft.access_request_settings?.default_duration_days ?? 30)}
             onChange={(v) => updateDraft('access_request_settings.default_duration_days', parseInt(v, 10))}
             options={[
-              { value: '7',   label: '7 days' },
-              { value: '30',  label: '30 days' },
-              { value: '90',  label: '90 days' },
+              { value: '7', label: '7 days' },
+              { value: '30', label: '30 days' },
+              { value: '90', label: '90 days' },
               { value: '180', label: '180 days' },
               { value: '365', label: '1 year' },
             ]}
@@ -1112,10 +1079,10 @@ function AdminPreferences({ draft, updateDraft }) {
             value={draft.system_preferences?.profile_change_auto_approve || 'never'}
             onChange={(v) => updateDraft('system_preferences.profile_change_auto_approve', v)}
             options={[
-              { value: 'never',        label: 'Never — All changes require manual approval' },
-              { value: 'email',        label: 'Email changes only' },
-              { value: 'phone',        label: 'Phone changes only' },
-              { value: 'email_phone',  label: 'Email and phone changes' },
+              { value: 'never', label: 'Never — All changes require manual approval' },
+              { value: 'email', label: 'Email changes only' },
+              { value: 'phone', label: 'Phone changes only' },
+              { value: 'email_phone', label: 'Email and phone changes' },
             ]}
           />
         </div>
@@ -1152,8 +1119,8 @@ function ProfilePrivacyBanner({ hidden }) {
 
 function deepSet(obj, path, value) {
   const keys = path.split('.');
-  const copy  = JSON.parse(JSON.stringify(obj || {}));
-  let cursor  = copy;
+  const copy = JSON.parse(JSON.stringify(obj || {}));
+  let cursor = copy;
   for (let i = 0; i < keys.length - 1; i++) {
     if (!cursor[keys[i]] || typeof cursor[keys[i]] !== 'object') {
       cursor[keys[i]] = {};

@@ -22,7 +22,7 @@ class VerifyController extends Controller
             ->where('verification_result', 'success')
             ->count();
         $failedVerifications = VerificationLog::where('verifier_user_id', $userId)
-            ->where('verification_result', 'failed')
+            ->where('verification_result', '!=', 'success')
             ->count();
         $verificationsToday = VerificationLog::where('verifier_user_id', $userId)
             ->whereDate('verified_at', today())
@@ -51,6 +51,60 @@ class VerifyController extends Controller
                 'verifications_today' => $verificationsToday,
             ],
             'recent_verifications' => $recentVerifications,
+        ]);
+    }
+
+    /**
+     * Get system statistics for the public landing page
+     */
+    public function systemStats()
+    {
+        return response()->json([
+            'success' => true,
+            'totalSystemUsers' => \App\Models\User::count(),
+            'totalUniversities' => \App\Models\Institution::count(),
+            'totalCertificates' => \App\Models\Certificate::count(),
+        ]);
+    }
+
+    /**
+     * Health check endpoint for system status page
+     */
+    public function health()
+    {
+        try {
+            \Illuminate\Support\Facades\DB::connection()->getPdo();
+            $dbStatus = 'operational';
+        } catch (\Exception $e) {
+            $dbStatus = 'offline';
+        }
+
+        return response()->json([
+            'success' => true,
+            'status' => $dbStatus === 'operational' ? 'operational' : 'degraded',
+            'database' => $dbStatus,
+            'api' => 'operational'
+        ], $dbStatus === 'operational' ? 200 : 503);
+    }
+
+    /**
+     * Get list of participating universities for the public page
+     */
+    public function publicUniversities(Request $request)
+    {
+        $query = \App\Models\Institution::select('institutions.id', 'institutions.name', 'institutions.city', 'institutions.website', 'institutions.created_at')
+            ->join('users', 'institutions.user_id', '=', 'users.id')
+            ->where('users.is_approved', 1);
+
+        if ($request->filled('search')) {
+            $query->where('institutions.name', 'like', '%' . $request->search . '%');
+        }
+
+        $universities = $query->orderBy('institutions.name', 'asc')->paginate(20);
+            
+        return response()->json([
+            'success' => true,
+            'data' => $universities
         ]);
     }
 
@@ -84,7 +138,7 @@ class VerifyController extends Controller
             ], 400);
         }
 
-        $certificate = Certificate::with(['student', 'institution', 'issuedBy'])
+        $certificate = Certificate::with(['student', 'institution', 'issuedBy', 'enrollment'])
             ->where('serial', $serial)
             ->whereNull('deleted_at')
             ->first();
@@ -100,7 +154,7 @@ class VerifyController extends Controller
         }
 
         if ($certificate->revoked_at) {
-            $this->logVerification($request, $certificate->id, 'revoked', false, 'Certificate has been revoked');
+            $this->logVerification($request, $certificate, 'revoked', false, 'Certificate has been revoked');
 
             return response()->json([
                 'success' => true,
@@ -163,14 +217,16 @@ class VerifyController extends Controller
             'certificate' => [
                 'serial' => $certificate->serial,
                 'student_name' => $certificate->student?->full_name ?? 'N/A',
-                'student_id' => $certificate->student?->student_id ?? 'N/A',
-                'degree_title' => $certificate->degree_title,
-                'program_name' => $certificate->program_name,
+                'student_id' => $certificate->enrollment?->enrollment_number ?? 'N/A',
+                // HIGH-15 (GROUP 3): Renamed key 'degree_title' → 'certificate_level' for consistent API response
+                'certificate_level' => $certificate->certificate_name,
+                // HIGH-15 (GROUP 3): Renamed key 'program_name' → 'program' for consistent API response
+                'program' => $certificate->department,
                 'major' => $certificate->major,
-                'registration_no' => $certificate->registration_no,
+                'registration_no' => $certificate->enrollment?->enrollment_number,
                 'cgpa' => $certificate->cgpa,
                 'issue_date' => $certificate->issue_date?->format('Y-m-d'),
-                'completion_date' => $certificate->completion_date?->format('Y-m-d'),
+                'completion_date' => $certificate->convocation_date?->format('Y-m-d'),
                 'institution' => $certificate->institution?->name ?? 'N/A',
                 'issued_by' => $certificate->issuedBy?->name ?? 'N/A',
                 'status' => 'valid',
@@ -279,11 +335,15 @@ class VerifyController extends Controller
         $perPage = 25;
 
         $query = VerificationLog::where('verifier_user_id', $userId)
-            ->with('certificate.institution', 'certificate.student');
+            ->with('certificate.institution', 'certificate.student', 'certificate.enrollment');
 
         // Filters
         if ($request->filled('status') && $request->status !== 'all') {
-            $query->where('verification_result', $request->status);
+            if ($request->status === 'failed') {
+                $query->where('verification_result', '!=', 'success');
+            } else {
+                $query->where('verification_result', $request->status);
+            }
         }
         if ($request->filled('serial')) {
             $query->where('serial', 'like', '%' . $request->serial . '%');
@@ -313,13 +373,17 @@ class VerifyController extends Controller
                 'details'      => $log->details,
                 'certificate'  => $log->certificate ? [
                     'serial'       => $log->certificate->serial,
-                    'degree_title' => $log->certificate->degree_title,
-                    'program_name' => $log->certificate->program_name,
+                    // HIGH-15 (GROUP 3): Renamed key 'degree_title' → 'certificate_level' for consistent API response
+                    'certificate_level' => $log->certificate->certificate_name,
+                    // HIGH-15 (GROUP 3): Renamed key 'program_name' → 'program' for consistent API response
+                    'program'      => $log->certificate->department,
                     'major'        => $log->certificate->major,
+                    'registration_no' => $log->certificate->enrollment?->enrollment_number,
                     'cgpa'         => $log->certificate->cgpa,
                     'issue_date'   => $log->certificate->issue_date?->format('Y-m-d'),
+                    'completion_date' => $log->certificate->convocation_date?->format('Y-m-d'),
                     'student_name' => $log->certificate->student?->full_name,
-                    'student_id'   => $log->certificate->student?->student_id,
+                    'student_id'   => $log->certificate->enrollment?->enrollment_number,
                     'institution'  => $log->certificate->institution?->name,
                 ] : null,
             ];
@@ -346,7 +410,11 @@ class VerifyController extends Controller
             ->with('certificate.institution', 'certificate.student');
 
         if ($request->filled('status') && $request->status !== 'all') {
-            $query->where('verification_result', $request->status);
+            if ($request->status === 'failed') {
+                $query->where('verification_result', '!=', 'success');
+            } else {
+                $query->where('verification_result', $request->status);
+            }
         }
         if ($request->filled('serial')) {
             $query->where('serial', 'like', '%' . $request->serial . '%');

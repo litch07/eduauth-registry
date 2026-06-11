@@ -17,6 +17,7 @@ import api from '../../services/api';
 const STATUS_OPTIONS = [
   { value: 'all',      label: 'All Statuses' },
   { value: 'success',  label: 'Verified' },
+  { value: 'failed',   label: 'Failed (All Types)' },
   { value: 'revoked',  label: 'Revoked' },
   { value: 'not_found', label: 'Not Found' },
   { value: 'dob_mismatch', label: 'DOB Mismatch' },
@@ -154,6 +155,28 @@ export default function VerificationHistory() {
     }
   };
 
+  const handleStatClick = (label) => {
+    let newFilters = { status: 'all', serial: '', from: '', to: '' };
+    
+    if (label === 'Successful') {
+      newFilters.status = 'success';
+    } else if (label === 'Failed') {
+      newFilters.status = 'failed';
+    } else if (label === 'Today') {
+      const today = new Date();
+      const yyyy = today.getFullYear();
+      const mm = String(today.getMonth() + 1).padStart(2, '0');
+      const dd = String(today.getDate()).padStart(2, '0');
+      const dateStr = `${yyyy}-${mm}-${dd}`;
+      newFilters.from = dateStr;
+      newFilters.to = dateStr;
+    }
+
+    setFilters(newFilters);
+    setAppliedFilters(newFilters);
+    fetchHistory(1, newFilters);
+  };
+
   const filtersActive = appliedFilters.status !== 'all' || appliedFilters.serial || appliedFilters.from || appliedFilters.to;
 
   return (
@@ -195,7 +218,11 @@ export default function VerificationHistory() {
               { label: 'Failed', value: stats.failed_verifications },
               { label: 'Today', value: stats.verifications_today },
             ].map((s) => (
-              <Card key={s.label} className="text-center">
+              <Card 
+                key={s.label} 
+                className="text-center cursor-pointer hover:border-primary-500 hover:ring-1 hover:ring-primary-500 transition-all"
+                onClick={() => handleStatClick(s.label)}
+              >
                 <p className="text-2xl font-bold text-gray-900 dark:text-white">{s.value ?? 0}</p>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{s.label}</p>
               </Card>
@@ -221,7 +248,7 @@ export default function VerificationHistory() {
               <select
                 value={filters.status}
                 onChange={(e) => setFilters((f) => ({ ...f, status: e.target.value }))}
-                className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
               >
                 {STATUS_OPTIONS.map((opt) => (
                   <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -237,7 +264,7 @@ export default function VerificationHistory() {
                   value={filters.serial}
                   onChange={(e) => setFilters((f) => ({ ...f, serial: e.target.value.toUpperCase() }))}
                   placeholder="e.g., BSC-26"
-                  className="w-full rounded-xl border border-gray-300 bg-white pl-9 pr-3 py-2.5 text-sm font-mono text-gray-900 placeholder-gray-400 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 dark:border-gray-700 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500"
+                  className="w-full rounded-xl border border-gray-300 bg-white pl-9 pr-3 py-2.5 text-sm font-mono text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500"
                 />
               </div>
             </div>
@@ -248,7 +275,7 @@ export default function VerificationHistory() {
                 type="date"
                 value={filters.from}
                 onChange={(e) => setFilters((f) => ({ ...f, from: e.target.value }))}
-                className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
               />
             </div>
             {/* To date */}
@@ -258,7 +285,7 @@ export default function VerificationHistory() {
                 type="date"
                 value={filters.to}
                 onChange={(e) => setFilters((f) => ({ ...f, to: e.target.value }))}
-                className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
               />
             </div>
           </div>
@@ -314,29 +341,29 @@ export default function VerificationHistory() {
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                   {rows.map((row) => (
-                    <tr key={row.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition">
-                      <td className="py-3 px-4 pl-0">
+                    <tr key={row.id} className="h-12 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition">
+                      <td className="px-4 py-0 pl-0">
                         <span className="font-mono text-xs font-medium text-gray-900 dark:text-white">{row.serial}</span>
                       </td>
-                      <td className="py-3 px-4">
-                        <span className="text-gray-700 dark:text-gray-300">{row.student_name || '—'}</span>
+                      <td className="px-4 py-0">
+                        <span className="text-xs text-gray-700 dark:text-gray-300">{row.student_name || '—'}</span>
                       </td>
-                      <td className="py-3 px-4">
+                      <td className="px-4 py-0">
                         <span className="text-gray-500 dark:text-gray-400 text-xs">{row.institution || '—'}</span>
                       </td>
-                      <td className="py-3 px-4">
+                      <td className="px-4 py-0">
                         <StatusBadge status={row.status} />
                       </td>
-                      <td className="py-3 px-4">
+                      <td className="px-4 py-0">
                         <span className="text-gray-500 dark:text-gray-400 text-xs whitespace-nowrap">{row.verified_at}</span>
                       </td>
-                      <td className="py-3 px-4 pr-0 text-right">
+                      <td className="px-4 py-0 pr-0 text-right">
                         <button
                           onClick={() => setSelectedLog(row)}
-                          className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-300 hover:border-primary-300 hover:text-primary-600 transition"
+                          className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition"
                         >
                           <Eye className="h-3.5 w-3.5" />
-                          Details
+                          View
                         </button>
                       </td>
                     </tr>
@@ -400,7 +427,7 @@ export default function VerificationHistory() {
         open={!!selectedLog}
         onClose={() => setSelectedLog(null)}
         title="Verification Details"
-        size="lg"
+        size="xl"
       >
         {selectedLog && (
           <div className="space-y-5">
@@ -443,8 +470,8 @@ export default function VerificationHistory() {
                   <DetailRow icon={Hash}      label="Serial Number" value={selectedLog.certificate.serial} />
                   <DetailRow icon={User}      label="Student Name"  value={selectedLog.certificate.student_name} />
                   <DetailRow icon={User}      label="Student ID"    value={selectedLog.certificate.student_id} />
-                  <DetailRow icon={Award}     label="Degree"        value={selectedLog.certificate.degree_title} />
-                  <DetailRow icon={Award}     label="Program"       value={selectedLog.certificate.program_name} />
+                  <DetailRow icon={Award}     label="Degree"        value={selectedLog.certificate.certificate_level || selectedLog.certificate.degree_title} />
+                  <DetailRow icon={Award}     label="Program"       value={selectedLog.certificate.program || selectedLog.certificate.program_name} />
                   <DetailRow icon={Award}     label="Major"         value={selectedLog.certificate.major} />
                   <DetailRow icon={Award}     label="CGPA"          value={selectedLog.certificate.cgpa} />
                   <DetailRow icon={Building2} label="Institution"   value={selectedLog.certificate.institution} />

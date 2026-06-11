@@ -1,17 +1,36 @@
+import React from 'react';
 import { cn } from '../../utils/helpers';
 
-const variants = {
-  default: 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-100',
-  primary: 'bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300',
-  success: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300',
-  warning: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300',
-  danger: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300',
-  info: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',
-};
+export default function Badge({ children, variant = 'default', size = 'md', dot = false, className = '' }) {
+  const variants = {
+    default: 'bg-[var(--bg-elevated)] text-[var(--text-secondary)]',
+    primary: 'bg-[var(--brand-light)] text-[var(--brand)]',
+    success: 'bg-[var(--success)]/10 text-[var(--success)]',
+    warning: 'bg-[var(--warning)]/10 text-[var(--warning)]',
+    danger:  'bg-[var(--danger)]/10 text-[var(--danger)]',
+    info:    'bg-[var(--info)]/10 text-[var(--info)]',
+  };
 
-export default function Badge({ children, variant = 'default', className = '' }) {
+  const sizes = {
+    sm: 'text-xs px-2 py-0.5',
+    md: 'text-xs px-2.5 py-1',
+    lg: 'text-sm px-3 py-1',
+  };
+
+  const dotColors = {
+    default: 'bg-[var(--text-secondary)]',
+    primary: 'bg-[var(--brand)]',
+    success: 'bg-[var(--success)]',
+    warning: 'bg-[var(--warning)]',
+    danger:  'bg-[var(--danger)]',
+    info:    'bg-[var(--info)]',
+  };
+
   return (
-    <span className={cn('inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold', variants[variant], className)}>
+    <span className={cn('inline-flex items-center rounded-full font-medium', variants[variant], sizes[size], className)}>
+      {dot && (
+        <span className={cn('mr-1.5 h-1.5 w-1.5 rounded-full', dotColors[variant])} />
+      )}
       {children}
     </span>
   );

@@ -81,9 +81,9 @@ class EnrollmentApplicationController extends Controller
                 ], 404);
             }
 
-            $applications = EnrollmentApplication::with('institution')
+            $applications = EnrollmentApplication::with(['institution', 'department', 'certificateLevel'])
                 ->where('student_id', $student->id)
-                ->orderByRaw("FIELD(status, 'more_info_requested', 'pending', 'approved', 'rejected')")
+                ->orderByRaw("FIELD(status, 'pending', 'approved', 'rejected')")
                 ->orderBy('created_at', 'desc')
                 ->get()
                 ->map(function ($app) {
@@ -92,7 +92,8 @@ class EnrollmentApplicationController extends Controller
                         'institution_id' => $app->institution_id,
                         'institution_name' => $app->institution->name ?? 'N/A',
                         'institution_city' => $app->institution->city ?? '',
-                        'program' => $app->program,
+                        'department' => $app->department->name ?? 'N/A',
+                        'certificate_level' => $app->certificateLevel->name ?? 'N/A',
                         'batch' => $app->batch,
                         'reason' => $app->reason,
                         'document_path' => $app->document_path,
@@ -118,6 +119,34 @@ class EnrollmentApplicationController extends Controller
     }
 
     /**
+     * Get active certificate levels and departments for an institution.
+     */
+    public function programs($institutionId)
+    {
+        try {
+            $levels = \App\Models\CertificateLevel::where('institution_id', $institutionId)
+                ->where('is_active', true)
+                ->get(['id', 'name']);
+                
+            $departments = \App\Models\Department::where('institution_id', $institutionId)
+                ->where('is_active', true)
+                ->get(['id', 'name', 'certificate_level_id']);
+
+            return response()->json([
+                'success' => true,
+                'levels' => $levels,
+                'departments' => $departments,
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch programs',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
      * Submit a new enrollment application.
      */
     public function store(Request $request)
@@ -125,7 +154,9 @@ class EnrollmentApplicationController extends Controller
         try {
             $validator = Validator::make($request->all(), [
                 'institution_id' => 'required|integer|exists:institutions,id',
-                'program' => 'nullable|string|max:255',
+                'certificate_level_id' => 'required|integer|exists:certificate_levels,id',
+                'department_id' => 'required|integer|exists:departments,id',
+                'consent_provided' => 'required|accepted',
                 'batch' => 'nullable|string|max:100',
                 'reason' => 'nullable|string|max:2000',
                 'document' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:5120',
@@ -163,7 +194,7 @@ class EnrollmentApplicationController extends Controller
             // Check for existing pending application to the same institution
             $existingApplication = EnrollmentApplication::where('student_id', $student->id)
                 ->where('institution_id', $request->institution_id)
-                ->whereIn('status', ['pending', 'more_info_requested'])
+                ->where('status', 'pending')
                 ->first();
 
             if ($existingApplication) {
@@ -196,7 +227,9 @@ class EnrollmentApplicationController extends Controller
             $application = EnrollmentApplication::create([
                 'student_id' => $student->id,
                 'institution_id' => $institution->id,
-                'program' => $request->program,
+                'certificate_level_id' => $request->certificate_level_id,
+                'department_id' => $request->department_id,
+                'consent_provided' => $request->boolean('consent_provided'),
                 'batch' => $request->batch,
                 'reason' => $request->reason,
                 'document_path' => $documentPath,
@@ -266,10 +299,10 @@ class EnrollmentApplicationController extends Controller
                 ], 404);
             }
 
-            if (!in_array($application->status, ['pending', 'more_info_requested'])) {
+            if ($application->status !== 'pending') {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Only pending or more-info-requested applications can be withdrawn',
+                    'message' => 'Only pending applications can be withdrawn',
                 ], 422);
             }
 

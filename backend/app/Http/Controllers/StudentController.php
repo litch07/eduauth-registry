@@ -11,14 +11,15 @@ class StudentController extends Controller
     {
         $query = Student::with('user');
 
-        // Search by student ID, NID, name, or email
+        // Search by NID (hashed), name, or email
         $query->when($request->search, function ($q, $search) {
-            $q->where(function ($subQ) use ($search) {
-                $subQ->where('nid', 'like', "%{$search}%")
-                    ->orWhere('student_id', 'like', "%{$search}%")
+            $nidHash = hash('sha256', trim($search));
+            $q->where(function ($subQ) use ($search, $nidHash) {
+                $subQ->where('nid_hash', $nidHash)
+                    ->orWhere('first_name', 'like', "%{$search}%")
+                    ->orWhere('last_name', 'like', "%{$search}%")
                     ->orWhereHas('user', function ($userQ) use ($search) {
-                        $userQ->where('name', 'like', "%{$search}%")
-                            ->orWhere('email', 'like', "%{$search}%");
+                        $userQ->where('email', 'like', "%{$search}%");
                     });
             });
         });

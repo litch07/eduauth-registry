@@ -9,7 +9,7 @@ import Modal from '../shared/Modal';
 import ConfirmModal from '../shared/ConfirmModal';
 import LoadingSpinner from '../shared/LoadingSpinner';
 import Badge from '../shared/Badge';
-import api from '../../services/api';
+import api, { cachedGet, clearCacheFor } from '../../services/api';
 
 export default function DepartmentsManager() {
   const [departments, setDepartments] = useState([]);
@@ -28,7 +28,7 @@ export default function DepartmentsManager() {
   const fetchDepartments = async () => {
     setLoading(true);
     try {
-      const { data } = await api.get('/university/departments');
+      const { data } = await cachedGet('/university/departments');
       setDepartments(data.departments || []);
     } catch (error) {
       toast.error('Failed to load departments');
@@ -53,9 +53,11 @@ export default function DepartmentsManager() {
     try {
       if (editingDepartment) {
         await api.put(`/university/departments/${editingDepartment.id}`, formData);
+        clearCacheFor('/university/departments');
         toast.success('Department updated successfully');
       } else {
         await api.post('/university/departments', formData);
+        clearCacheFor('/university/departments');
         toast.success('Department created successfully');
       }
       setModalOpen(false);
@@ -69,11 +71,23 @@ export default function DepartmentsManager() {
     if (!departmentToDeactivate) return;
     try {
       await api.delete(`/university/departments/${departmentToDeactivate.id}`);
+      clearCacheFor('/university/departments');
       toast.success('Department deactivated successfully');
       setDeactivateModalOpen(false);
       fetchDepartments();
     } catch (error) {
       toast.error('Failed to deactivate department');
+    }
+  };
+
+  const handleReactivate = async (id) => {
+    try {
+      await api.post(`/university/departments/${id}/reactivate`);
+      clearCacheFor('/university/departments');
+      toast.success('Department reactivated successfully');
+      fetchDepartments();
+    } catch (error) {
+      toast.error('Failed to reactivate department');
     }
   };
 
@@ -84,6 +98,7 @@ export default function DepartmentsManager() {
           <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
             <Building className="h-5 w-5 text-gray-400" />
             Department Management
+            {!loading && <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-300">{departments.length}</span>}
           </h2>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
             Define standard departments for enrollments and certificates.
@@ -131,12 +146,21 @@ export default function DepartmentsManager() {
                       <Button variant="secondary" onClick={() => openEditModal(dept)} className="!p-1.5" title="Edit">
                         <Edit2 className="h-4 w-4" />
                       </Button>
-                      {dept.is_active && (
+                      {dept.is_active ? (
                         <Button 
                           variant="danger" 
                           onClick={() => { setDepartmentToDeactivate(dept); setDeactivateModalOpen(true); }}
                           className="!p-1.5" 
                           title="Deactivate"
+                        >
+                          <PowerOff className="h-4 w-4" />
+                        </Button>
+                      ) : (
+                        <Button 
+                          variant="success" 
+                          onClick={() => handleReactivate(dept.id)}
+                          className="!p-1.5" 
+                          title="Reactivate"
                         >
                           <PowerOff className="h-4 w-4" />
                         </Button>

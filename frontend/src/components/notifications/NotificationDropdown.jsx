@@ -14,6 +14,7 @@ import {
 import api from '../../services/api';
 import { useOutsideClick } from '../../hooks/useOutsideClick';
 import { cn } from '../../utils/helpers';
+import { useNotifications } from '../../contexts/NotificationContext';
 
 const TYPE_CONFIG = {
   ENROLLMENT:        { icon: GraduationCap, color: 'text-blue-500',    bg: 'bg-blue-100 dark:bg-blue-900/30' },
@@ -28,22 +29,12 @@ const TYPE_CONFIG = {
 export default function NotificationDropdown() {
   const [isOpen, setIsOpen] = useState(false);
   const [notifications, setNotifications] = useState([]);
-  const [unreadCount, setUnreadCount] = useState(0);
+  const { unreadCount, setUnreadCount } = useNotifications();
   const dropdownRef = useRef(null);
   const navigate = useNavigate();
 
-  // Stabilise the callback so useOutsideClick's effect doesn't re-run every render
   const closeDropdown = useCallback(() => setIsOpen(false), []);
   useOutsideClick(dropdownRef, closeDropdown);
-
-  const fetchUnreadCount = async () => {
-    try {
-      const { data } = await api.get('/notifications/unread-count');
-      setUnreadCount(data.unread_count);
-    } catch (error) {
-      console.error('Failed to fetch unread count', error);
-    }
-  };
 
   const fetchNotifications = async () => {
     try {
@@ -53,46 +44,6 @@ export default function NotificationDropdown() {
       console.error('Failed to fetch notifications', error);
     }
   };
-
-  useEffect(() => {
-    fetchUnreadCount();
-
-    let intervalId = null;
-
-    const startPolling = () => {
-      if (!intervalId) {
-        // Poll every 30 seconds as required
-        intervalId = setInterval(fetchUnreadCount, 30000);
-      }
-    };
-
-    const stopPolling = () => {
-      if (intervalId) {
-        clearInterval(intervalId);
-        intervalId = null;
-      }
-    };
-
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        fetchUnreadCount();
-        startPolling();
-      } else {
-        stopPolling();
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    if (document.visibilityState === 'visible') {
-      startPolling();
-    }
-
-    return () => {
-      stopPolling();
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, []);
 
   useEffect(() => {
     if (isOpen) {
@@ -135,31 +86,29 @@ export default function NotificationDropdown() {
     <div className="relative" ref={dropdownRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="relative p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full dark:text-gray-400 dark:hover:text-gray-300 dark:hover:bg-gray-800 transition-colors"
+        className="w-[36px] h-[36px] flex items-center justify-center rounded-md text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] hover:text-[var(--text-primary)] transition-colors relative"
       >
         <Bell className="w-5 h-5" />
         {unreadCount > 0 && (
-          <span className="absolute top-1.5 right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white ring-2 ring-white dark:ring-gray-900">
-            {unreadCount > 9 ? '9+' : unreadCount}
+          <span className="absolute top-1.5 right-1.5 flex h-3 w-3 items-center justify-center rounded-full bg-red-500 ring-2 ring-[var(--bg-surface)]">
           </span>
         )}
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white dark:bg-gray-900 rounded-xl shadow-lg ring-1 ring-black ring-opacity-5 z-50 overflow-hidden flex flex-col max-h-[85vh]">
-          <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between bg-gray-50/50 dark:bg-gray-800/50">
-            <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Notifications</h3>
+        <div className="absolute right-0 mt-2 w-[360px] max-h-[400px] bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl shadow-lg z-50 flex flex-col overflow-hidden">
+          <div className="px-4 py-3 border-b border-[var(--border)] flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-[var(--text-primary)]">Notifications</h3>
             {notifications.length > 0 && (
               <button
                 onClick={markAllAsRead}
                 disabled={unreadCount === 0}
                 className={cn(
-                  "p-1.5 rounded-lg transition-all flex items-center gap-1.5 text-xs font-semibold",
+                  "px-2 py-1 rounded text-xs font-medium transition-colors flex items-center gap-1",
                   unreadCount > 0
-                    ? "text-brand-600 hover:text-brand-700 hover:bg-brand-50 dark:text-brand-400 dark:hover:text-brand-300 dark:hover:bg-brand-950/40 cursor-pointer"
-                    : "text-gray-400 dark:text-gray-600 cursor-not-allowed opacity-50"
+                    ? "text-[var(--brand)] hover:bg-[var(--brand-light)] cursor-pointer"
+                    : "text-[var(--text-muted)] cursor-not-allowed"
                 )}
-                title={unreadCount > 0 ? "Mark all as read" : "All caught up!"}
               >
                 <CheckCheck className="w-4 h-4" />
                 <span>Mark all read</span>
@@ -169,11 +118,11 @@ export default function NotificationDropdown() {
 
           <div className="overflow-y-auto flex-1">
             {notifications.length === 0 ? (
-              <div className="p-6 text-center text-sm text-gray-500 dark:text-gray-400">
+              <div className="p-6 text-center text-sm text-[var(--text-muted)]">
                 You have no notifications.
               </div>
             ) : (
-              <div className="divide-y divide-gray-100 dark:divide-gray-800">
+              <div className="divide-y divide-[var(--border)]">
                 {notifications.map((notification) => {
                   const config = TYPE_CONFIG[notification.type] || TYPE_CONFIG.INFO;
                   const Icon = config.icon;
@@ -183,41 +132,26 @@ export default function NotificationDropdown() {
                       key={notification.id}
                       onClick={() => handleNotificationClick(notification)}
                       className={cn(
-                        "p-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors cursor-pointer group flex gap-3",
-                        !notification.is_read ? "bg-brand-50/30 dark:bg-brand-900/10" : ""
+                        "p-[12px_16px] min-h-[64px] hover:bg-[var(--bg-elevated)] transition-colors cursor-pointer group flex gap-3",
+                        !notification.is_read ? "border-l-[3px] border-l-[var(--brand)] bg-[rgba(var(--brand-rgb),0.3)]" : "border-l-[3px] border-l-transparent"
                       )}
                     >
                       <div className={cn("flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center", config.bg, config.color)}>
                         <Icon className="w-5 h-5" />
                       </div>
-                      <div className="flex-1 min-w-0">
+                      <div className="flex-1 min-w-0 flex flex-col justify-center">
                         <div className="flex items-start justify-between gap-2">
-                          <p className={cn(
-                            "text-sm",
-                            !notification.is_read ? "font-semibold text-gray-900 dark:text-white" : "font-medium text-gray-700 dark:text-gray-300"
-                          )}>
+                          <p className="text-sm font-medium text-[var(--text-primary)] leading-tight">
                             {notification.title}
                           </p>
-                          <span className="text-[11px] text-gray-500 dark:text-gray-400 whitespace-nowrap pt-0.5">
+                          <span className="text-xs text-[var(--text-muted)] whitespace-nowrap">
                             {notification.created_at_human}
                           </span>
                         </div>
-                        <p className={cn(
-                          "text-sm mt-0.5 line-clamp-2",
-                          !notification.is_read ? "text-gray-600 dark:text-gray-300" : "text-gray-500 dark:text-gray-400"
-                        )}>
+                        <p className="text-xs text-[var(--text-secondary)] mt-1 line-clamp-2">
                           {notification.message}
                         </p>
                       </div>
-                      {!notification.is_read && (
-                        <button
-                          onClick={(e) => markAsRead(notification.id, e)}
-                          className="flex-shrink-0 opacity-0 group-hover:opacity-100 p-1.5 text-brand-600 hover:bg-brand-100 dark:text-brand-400 dark:hover:bg-brand-900/50 rounded-full transition-all"
-                          title="Mark as read"
-                        >
-                          <Check className="w-4 h-4" />
-                        </button>
-                      )}
                     </div>
                   );
                 })}
@@ -225,12 +159,12 @@ export default function NotificationDropdown() {
             )}
           </div>
 
-          <div className="p-2 border-t border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/50">
+          <div className="p-2 border-t border-[var(--border)]">
             <button
               onClick={() => { setIsOpen(false); navigate('/notifications'); }}
-              className="w-full py-2 text-sm text-center font-medium text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+              className="w-full py-2 text-sm text-center font-medium text-[var(--text-primary)] hover:bg-[var(--bg-elevated)] rounded-md transition-colors"
             >
-              See All Notifications
+              View all notifications
             </button>
           </div>
         </div>

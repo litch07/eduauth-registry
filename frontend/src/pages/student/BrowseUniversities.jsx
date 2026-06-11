@@ -9,7 +9,11 @@ import Input from '../../components/shared/Input';
 import Modal from '../../components/shared/Modal';
 import LoadingSpinner from '../../components/shared/LoadingSpinner';
 import EmptyState from '../../components/shared/EmptyState';
+import SearchBar from '../../components/shared/SearchBar';
+import SelectField from '../../components/shared/SelectField';
+import Badge from '../../components/shared/Badge';
 import api from '../../services/api';
+import { generateBatchOptions } from '../../utils/helpers';
 
 export default function BrowseUniversities() {
   const navigate = useNavigate();
@@ -202,12 +206,33 @@ export default function BrowseUniversities() {
 
 // ─── APPLICATION MODAL ──────────────────────────────────────
 function ApplicationModal({ university, onClose, onSuccess }) {
-  const [program, setProgram] = useState('');
+  const [levels, setLevels] = useState([]);
+  const [departments, setDepartments] = useState([]);
+  const [selectedLevel, setSelectedLevel] = useState('');
+  const [selectedDepartment, setSelectedDepartment] = useState('');
+  const [consentProvided, setConsentProvided] = useState(false);
+  const [loadingPrograms, setLoadingPrograms] = useState(false);
   const [batch, setBatch] = useState('');
   const [reason, setReason] = useState('');
   const [file, setFile] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    const fetchPrograms = async () => {
+      setLoadingPrograms(true);
+      try {
+        const { data } = await api.get(`/student/universities/${university.id}/programs`);
+        setLevels(data.levels || []);
+        setDepartments(data.departments || []);
+      } catch (err) {
+        toast.error('Failed to load university programs');
+      } finally {
+        setLoadingPrograms(false);
+      }
+    };
+    fetchPrograms();
+  }, [university.id]);
 
   const handleFileChange = (e) => {
     const selected = e.target.files?.[0];
@@ -235,7 +260,9 @@ function ApplicationModal({ university, onClose, onSuccess }) {
     try {
       const formData = new FormData();
       formData.append('institution_id', university.id);
-      if (program) formData.append('program', program);
+      if (selectedLevel) formData.append('certificate_level_id', selectedLevel);
+      if (selectedDepartment) formData.append('department_id', selectedDepartment);
+      formData.append('consent_provided', consentProvided ? '1' : '0');
       if (batch) formData.append('batch', batch);
       if (reason) formData.append('reason', reason);
       if (file) formData.append('document', file);
@@ -289,33 +316,42 @@ function ApplicationModal({ university, onClose, onSuccess }) {
           </div>
         )}
 
-        <div>
-          <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
-            Program of Interest <span className="text-gray-400">(Optional)</span>
-          </label>
-          <input
-            type="text"
-            className="block w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:focus:border-primary-400 dark:focus:ring-primary-400"
-            value={program}
-            onChange={(e) => setProgram(e.target.value)}
-            placeholder="e.g. BSc in Computer Science"
-            maxLength={255}
-          />
-        </div>
+        <SelectField
+          label={<span>Certificate Level <span className="text-red-500">*</span></span>}
+          value={selectedLevel}
+          onChange={(val) => {
+            setSelectedLevel(val);
+            setSelectedDepartment('');
+          }}
+          options={[
+            { value: '', label: 'Select Certificate Level...' },
+            ...levels.map(l => ({ value: l.id, label: l.name }))
+          ]}
+          disabled={loadingPrograms}
+        />
 
-        <div>
-          <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
-            Batch / Intake <span className="text-gray-400">(Optional)</span>
-          </label>
-          <input
-            type="text"
-            className="block w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:focus:border-primary-400 dark:focus:ring-primary-400"
-            value={batch}
-            onChange={(e) => setBatch(e.target.value)}
-            placeholder="e.g. Spring 2026"
-            maxLength={100}
+        {selectedLevel && (
+          <SelectField
+            label={<span>Department <span className="text-red-500">*</span></span>}
+            value={selectedDepartment}
+            onChange={setSelectedDepartment}
+            options={[
+              { value: '', label: 'Select Department...' },
+              ...departments.filter(d => d.certificate_level_id == selectedLevel).map(d => ({ value: d.id, label: d.name }))
+            ]}
           />
-        </div>
+        )}
+
+        <SelectField
+          label={<span>Batch / Intake <span className="text-[var(--text-muted)]">(Optional)</span></span>}
+          value={batch}
+          onChange={setBatch}
+          options={[
+            { value: '', label: 'Select batch...' },
+            ...generateBatchOptions()
+          ]}
+          placeholder="Select batch..."
+        />
 
         <div>
           <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
@@ -359,9 +395,29 @@ function ApplicationModal({ university, onClose, onSuccess }) {
           )}
         </div>
 
+        <div className="flex items-start gap-2 mt-4 mb-2 select-none">
+          <div className="w-4 h-4 shrink-0 flex items-center justify-center mt-1">
+            <input
+              type="checkbox"
+              id="consent_provided"
+              checked={consentProvided}
+              onChange={(e) => setConsentProvided(e.target.checked)}
+              className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 focus:ring-offset-0 focus:outline-none cursor-pointer"
+            />
+          </div>
+          <label htmlFor="consent_provided" className="text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
+            I consent to the university accessing and viewing my academic records and certificates. <span className="text-red-500">*</span>
+          </label>
+        </div>
+
         <div className="flex gap-3">
-          <Button type="button" variant="secondary" onClick={onClose}>Cancel</Button>
-          <Button type="submit" loading={submitting} className="flex-1">
+          <Button type="button" variant="secondary" onClick={onClose} disabled={submitting}>Cancel</Button>
+          <Button
+            type="submit"
+            loading={submitting}
+            disabled={!consentProvided || !selectedLevel || !selectedDepartment}
+            className="flex-1"
+          >
             <Send className="mr-2 h-4 w-4" />
             Submit Application
           </Button>

@@ -8,6 +8,7 @@ use App\Models\ActivityLog;
 use App\Models\PendingRegistration;
 use App\Models\Student;
 use App\Models\User;
+use App\Services\EncryptionService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -29,13 +30,15 @@ class RegisterController extends Controller
                 'last_name' => 'required_if:role,student|string|max:100',
                 'nid' => 'required_if:role,student|string|max:50',
                 'date_of_birth' => 'required_if:role,student|date|before:-15 years',
+                'gender' => 'required_if:role,student|in:Male,Female,Other',
                 'phone' => 'required_if:role,student|required_if:role,university|required_if:role,verifier|string|max:30',
-                'address' => 'required_if:role,student|required_if:role,university|string|max:1000',
+                'address' => 'required_if:role,university|nullable|string|max:1000',
                 'name' => 'required_if:role,university|string|max:255',
                 'registration_number' => 'required_if:role,university|string|max:100|unique:institutions,registration_number',
                 'city' => 'required_if:role,university|string|max:120',
                 'contact_person' => 'required_if:role,verifier|string|max:255',
                 'company_name' => 'required_if:role,verifier|string|max:255',
+                'designation' => 'nullable|string|max:255',
                 'purpose' => 'required_if:role,verifier|string|max:1000',
             ],
             [
@@ -63,7 +66,7 @@ class RegisterController extends Controller
         }
 
         if ($payload['role'] === 'student') {
-            // store a one-way hash of the NID so we can check uniqueness without keeping the raw number
+            // Compute SHA-256 hash for fast uniqueness checks and NID-based search
             $nidHash = hash('sha256', (string) $payload['nid']);
 
             if (Student::where('nid_hash', $nidHash)->whereNull('deleted_at')->exists()) {
@@ -74,7 +77,13 @@ class RegisterController extends Controller
                 ], 422);
             }
 
-            $payload['nid_hash'] = $nidHash;
+            // Encrypt NID with AES-256-CBC for recoverable storage
+            $nidEncrypted = EncryptionService::encryptNid((string) $payload['nid']);
+
+            $payload['nid_hash']      = $nidHash;
+            $payload['nid_encrypted'] = $nidEncrypted;
+
+            // Never store or log the plain NID value
             unset($payload['nid']);
         }
 

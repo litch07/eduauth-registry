@@ -7,6 +7,7 @@ import Button from '../shared/Button';
 import Input from '../shared/Input';
 import authService from '../../services/authService';
 import EmailVerificationModal from './EmailVerificationModal';
+import Card from '../shared/Card';
 
 const baseSchema = {
   email: yup.string().email('Please enter a valid email address').required('Email is required'),
@@ -24,8 +25,9 @@ const studentSchema = yup.object().shape({
   last_name: yup.string().required('Last name is required'),
   nid: yup.string().required('NID is required'),
   date_of_birth: yup.string().required('Date of birth is required'),
+  gender: yup.string().oneOf(['Male', 'Female', 'Other']).required('Gender is required'),
   phone: yup.string().required('Phone is required'),
-  address: yup.string().required('Address is required'),
+  address: yup.string().nullable(),
 });
 
 const universitySchema = yup.object().shape({
@@ -47,13 +49,13 @@ const verifierSchema = yup.object().shape({
   address: yup.string().nullable(),
 });
 
-export default function RegisterForm() {
+export default function RegisterForm({ defaultRole = 'student' }) {
   const [serverError, setServerError] = useState('');
   const [verificationEmail, setVerificationEmail] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const navigate = useNavigate();
 
-  const [currentRole, setCurrentRole] = useState('student');
+  const [currentRole, setCurrentRole] = useState(defaultRole);
 
   const {
     register,
@@ -65,11 +67,11 @@ export default function RegisterForm() {
   } = useForm({
     resolver: yupResolver(
       currentRole === 'student' ? studentSchema :
-      currentRole === 'university' ? universitySchema :
-      verifierSchema
+        currentRole === 'university' ? universitySchema :
+          verifierSchema
     ),
     defaultValues: {
-      role: 'student',
+      role: defaultRole,
     },
   });
 
@@ -100,7 +102,7 @@ export default function RegisterForm() {
     try {
       const payload = { ...data };
       await authService.register(payload);
-      
+
       setVerificationEmail(data.email);
       setModalOpen(true);
     } catch (err) {
@@ -108,7 +110,7 @@ export default function RegisterForm() {
         setServerError('Network error. Please ensure the backend server is running.');
         return;
       }
-      
+
       const responseData = err.response?.data;
 
       if (err.response?.status === 422 && responseData?.errors) {
@@ -132,13 +134,20 @@ export default function RegisterForm() {
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <Input label="Last Name" {...register('last_name')} error={errors.last_name?.message} />
-            <div className="flex items-center text-sm text-gray-500 dark:text-gray-400 mt-6">
-              Your Student ID will be assigned by your university upon enrollment.
-            </div>
+            <Input label="NID or Birth Certificate Number" {...register('nid')} error={errors.nid?.message} />
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
-            <Input label="NID" {...register('nid')} error={errors.nid?.message} />
             <Input type="date" label="Date of Birth" {...register('date_of_birth')} error={errors.date_of_birth?.message} />
+            <div>
+              <label className="mb-1 block text-sm font-medium text-[var(--text-secondary)]">Gender</label>
+              <select className="input-field" {...register('gender')}>
+                <option value="">Select Gender</option>
+                <option value="Male">Male</option>
+                <option value="Female">Female</option>
+                <option value="Other">Other</option>
+              </select>
+              {errors.gender && <p className="mt-1 text-xs text-[var(--danger)]">{errors.gender.message}</p>}
+            </div>
           </div>
         </FormSection>
         <FormSection title="Contact">
@@ -188,33 +197,23 @@ export default function RegisterForm() {
 
   return (
     <>
-      <div className="mx-auto w-full max-w-2xl rounded-3xl border border-white/10 bg-white/90 p-8 shadow-2xl shadow-slate-900/10 backdrop-blur dark:bg-gray-900/80">
-        <div className="mb-8 space-y-2 text-center">
-          <p className="text-sm font-semibold uppercase tracking-[0.15em] text-primary-600">Create account</p>
-          <h2 className="text-3xl font-bold text-gray-900 dark:text-white">Register for EduAuth</h2>
-          <p className="text-sm text-gray-600 dark:text-gray-400">{roleDescription}</p>
+      <Card className="w-full !p-6 sm:!p-10 md:!p-12">
+        <div className="mb-10 space-y-2 text-center">
+          <p className="text-sm font-semibold uppercase tracking-[0.15em] text-[var(--brand)]">Create account</p>
+          <h2 className="text-3xl font-bold text-[var(--text-primary)]">Register for EduAuth Registry</h2>
+          <p className="text-sm text-[var(--text-secondary)]">{roleDescription}</p>
         </div>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
           {serverError && (
-            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-900/20 dark:text-red-300">
+            <div className="rounded-[8px] border border-[var(--danger)]/30 bg-[var(--danger)]/10 px-4 py-3 text-sm text-[var(--danger)]">
               {serverError}
             </div>
           )}
 
           <FormSection title="Account">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Input type="email" label="Email Address" {...register('email')} error={errors.email?.message} />
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Role</label>
-                <select className="input-field" {...register('role')}>
-                  <option value="student">Student</option>
-                  <option value="university">University</option>
-                  <option value="verifier">Verifier</option>
-                </select>
-                {errors.role && <p className="mt-1 text-xs text-red-600 dark:text-red-400">{errors.role.message}</p>}
-              </div>
-            </div>
+            <input type="hidden" {...register('role')} value={defaultRole} />
+            <Input type="email" label="Email Address" {...register('email')} error={errors.email?.message} />
             <div className="grid gap-4 sm:grid-cols-2">
               <Input type="password" label="Password" {...register('password')} error={errors.password?.message} />
               <Input type="password" label="Confirm Password" {...register('password_confirmation')} error={errors.password_confirmation?.message} />
@@ -223,15 +222,15 @@ export default function RegisterForm() {
 
           {fieldsByRole[selectedRole]}
 
-          <Button type="submit" loading={isSubmitting} className="w-full">
+          <Button type="submit" loading={isSubmitting} className="w-full" size="lg">
             Register
           </Button>
         </form>
 
-        <p className="mt-6 text-center text-sm text-gray-600 dark:text-gray-400">
-          Already have an account? <Link to="/login" className="font-medium text-primary-600 hover:text-primary-700">Sign in</Link>
+        <p className="mt-6 text-center text-sm text-[var(--text-secondary)]">
+          Already have an account? <Link to="/login" className="font-medium text-[var(--brand)] hover:underline">Sign in</Link>
         </p>
-      </div>
+      </Card>
 
       <EmailVerificationModal
         open={modalOpen}
@@ -246,7 +245,7 @@ export default function RegisterForm() {
 function FormSection({ title, children }) {
   return (
     <div className="space-y-4">
-      <h3 className="text-xs font-semibold uppercase tracking-[0.1em] text-gray-400 dark:text-gray-500">{title}</h3>
+      <h3 className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--text-muted)]">{title}</h3>
       {children}
     </div>
   );

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Log;
 
@@ -52,6 +53,42 @@ class EncryptionService
         } catch (\Exception $e) {
             Log::debug('DOB decryption failed: ' . $e->getMessage());
             return null;
+        }
+    }
+
+    /**
+     * Encrypt a National ID (NID) or Birth Certificate number for secure storage.
+     *
+     * Uses Laravel's built-in AES-256-CBC encryption (via APP_KEY).
+     * The encrypted value is recoverable — use decryptNid() to retrieve the plaintext.
+     *
+     * @param string $plainNid The raw NID/birth certificate string
+     * @return string AES-encrypted ciphertext
+     */
+    public static function encryptNid(string $plainNid): string
+    {
+        return Crypt::encryptString($plainNid);
+    }
+
+    /**
+     * Decrypt a stored NID ciphertext back to plaintext.
+     *
+     * Returns '[Encrypted]' if decryption fails (e.g. the value is a legacy
+     * SHA-256 hash accidentally stored in nid_encrypted, or the key has changed).
+     *
+     * @param string $encryptedNid The ciphertext from nid_encrypted column
+     * @return string Plaintext NID, or '[Encrypted]' on failure
+     */
+    public static function decryptNid(string $encryptedNid): string
+    {
+        try {
+            return Crypt::decryptString($encryptedNid);
+        } catch (DecryptException $e) {
+            Log::debug('NID decryption failed (possibly legacy hash): ' . $e->getMessage());
+            return '[Encrypted]';
+        } catch (\Exception $e) {
+            Log::debug('NID decryption error: ' . $e->getMessage());
+            return '[Encrypted]';
         }
     }
 }

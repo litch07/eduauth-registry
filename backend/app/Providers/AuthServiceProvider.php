@@ -25,6 +25,11 @@ class AuthServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Gate::define('view-certificate-pdf', function (User $user, Certificate $certificate) {
+            // Admins can download any certificate PDF
+            if ($user->role === 'admin') {
+                return true;
+            }
+
             // Student who owns the certificate
             if ($user->role === 'student' && $user->id === $certificate->student->user_id) {
                 return true;

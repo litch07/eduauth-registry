@@ -1,73 +1,63 @@
 import React from 'react';
-import { AlertTriangle, X } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
+import Modal from './Modal';
 import Button from './Button';
 
 export default function ConfirmModal({ 
   isOpen, 
+  open, // backward compatibility
   onClose, 
   onConfirm, 
   title = "Confirm Action", 
   message = "Are you sure you want to proceed? This action cannot be undone.", 
+  confirmLabel,
   confirmText = "Confirm", 
   cancelText = "Cancel", 
+  confirmVariant,
   isDestructive = true,
+  loading,
   isLoading = false
 }) {
-  if (!isOpen) return null;
+  const actualIsOpen = isOpen !== undefined ? isOpen : open;
+  const actualLoading = loading !== undefined ? loading : isLoading;
+  const actualConfirmLabel = confirmLabel || confirmText;
+  const actualConfirmVariant = confirmVariant || (isDestructive ? 'danger' : 'primary');
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div 
-        className="fixed inset-0 bg-black/50 backdrop-blur-sm transition-opacity" 
-        onClick={!isLoading ? onClose : undefined}
-      />
-      <div className="relative w-full max-w-md overflow-hidden rounded-2xl bg-white p-6 text-left shadow-xl transition-all sm:my-8 sm:p-8 dark:bg-gray-900">
-        <div className="absolute right-4 top-4">
-          <button 
-            onClick={onClose} 
-            disabled={isLoading}
-            className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-500 disabled:opacity-50 dark:hover:bg-gray-800"
-            aria-label="Close dialog"
-          >
-            <X className="h-5 w-5" />
-          </button>
+    <Modal isOpen={actualIsOpen} onClose={actualLoading ? undefined : onClose} size="sm">
+      <div className="flex flex-col items-center text-center sm:flex-row sm:items-start sm:text-left">
+        <div className={`mx-auto flex h-12 w-12 shrink-0 items-center justify-center rounded-full sm:mx-0 sm:h-10 sm:w-10 ${actualConfirmVariant === 'danger' ? 'bg-[var(--danger)]/10' : 'bg-[var(--brand-light)]'}`}>
+          <AlertTriangle className={`h-6 w-6 ${actualConfirmVariant === 'danger' ? 'text-[var(--danger)]' : 'text-[var(--brand)]'}`} />
         </div>
-
-        <div className="sm:flex sm:items-start">
-          <div className={`mx-auto flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full sm:mx-0 sm:h-10 sm:w-10 ${isDestructive ? 'bg-red-100 dark:bg-red-900/30' : 'bg-primary-100 dark:bg-primary-900/30'}`}>
-            <AlertTriangle className={`h-6 w-6 ${isDestructive ? 'text-red-600 dark:text-red-400' : 'text-primary-600 dark:text-primary-400'}`} />
+        <div className="mt-3 sm:ml-4 sm:mt-0">
+          <h3 className="text-lg font-bold text-[var(--text-primary)]">
+            {title}
+          </h3>
+          <div className="mt-2">
+            <p className="text-sm text-[var(--text-secondary)]">
+              {message}
+            </p>
           </div>
-          <div className="mt-3 text-center sm:ml-4 sm:mt-0 sm:text-left">
-            <h3 className="text-lg font-bold leading-6 text-gray-900 dark:text-white" id="modal-title">
-              {title}
-            </h3>
-            <div className="mt-2">
-              <p className="text-sm text-gray-500 dark:text-gray-400">
-                {message}
-              </p>
-            </div>
-          </div>
-        </div>
-        
-        <div className="mt-6 sm:mt-8 sm:flex sm:flex-row-reverse sm:gap-3">
-          <Button 
-            onClick={onConfirm} 
-            variant={isDestructive ? "danger" : "primary"} 
-            className="w-full sm:w-auto"
-            loading={isLoading}
-          >
-            {confirmText}
-          </Button>
-          <Button 
-            onClick={onClose} 
-            variant="outline" 
-            className="mt-3 w-full sm:mt-0 sm:w-auto"
-            disabled={isLoading}
-          >
-            {cancelText}
-          </Button>
         </div>
       </div>
-    </div>
+      <div className="mt-6 flex flex-col-reverse gap-3 sm:mt-8 sm:flex-row sm:justify-end">
+        <Button 
+          onClick={onClose} 
+          variant="secondary" 
+          disabled={actualLoading}
+          className="w-full sm:w-auto"
+        >
+          {cancelText}
+        </Button>
+        <Button 
+          onClick={onConfirm} 
+          variant={actualConfirmVariant} 
+          loading={actualLoading}
+          className="w-full sm:w-auto"
+        >
+          {actualConfirmLabel}
+        </Button>
+      </div>
+    </Modal>
   );
 }

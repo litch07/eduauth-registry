@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useCallback, useState } from 'react';
+import { createContext, useContext, useEffect, useCallback, useMemo, useState, useRef } from 'react';
 import api from '../services/api';
 import { useAuth } from './AuthContext';
 
@@ -10,14 +10,12 @@ const NotificationContext = createContext(null);
  * Provides a lightweight, real-API-backed notification context.
  * - `unreadCount`   — live count from /notifications/unread-count
  * - `refreshCount`  — manually re-fetch the unread count (e.g. after an action)
- *
- * The bell dropdown manages its own notification list directly; this context
- * exists so other parts of the app (e.g. mobile nav badges) can read the
- * count without duplicating the fetch logic.
+ * - `setUnreadCount` — manually update unread count
  */
 export function NotificationProvider({ children }) {
   const { user } = useAuth();
   const [unreadCount, setUnreadCount] = useState(0);
+  const intervalRef = useRef(null);
 
   const refreshCount = useCallback(async () => {
     if (!user) {
@@ -32,13 +30,48 @@ export function NotificationProvider({ children }) {
     }
   }, [user]);
 
-  // Fetch on mount and whenever the logged-in user changes
-  useEffect(() => {
-    refreshCount();
+  const startPolling = useCallback(() => {
+    intervalRef.current = setInterval(refreshCount, 60000);
   }, [refreshCount]);
 
+  const stopPolling = useCallback(() => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+  }, []);
+
+  // Fetch on mount and start polling
+  useEffect(() => {
+    if (!user) return; // Auth guard
+
+    const handleVisibility = () => {
+      if (document.hidden) {
+        stopPolling();
+      } else {
+        refreshCount();
+        startPolling();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibility);
+    refreshCount();
+    startPolling();
+
+    return () => {
+      stopPolling();
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [user, refreshCount, startPolling, stopPolling]);
+
+  const value = useMemo(() => ({
+    unreadCount,
+    setUnreadCount,
+    refreshCount
+  }), [unreadCount, refreshCount]);
+
   return (
-    <NotificationContext.Provider value={{ unreadCount, refreshCount }}>
+    <NotificationContext.Provider value={value}>
       {children}
     </NotificationContext.Provider>
   );

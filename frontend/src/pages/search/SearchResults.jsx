@@ -8,6 +8,7 @@ import Button from '../../components/shared/Button';
 import LoadingSpinner from '../../components/shared/LoadingSpinner';
 import EmptyState from '../../components/shared/EmptyState';
 import api from '../../services/api';
+import Footer from '../../components/layout/Footer';
 
 export default function SearchResults() {
   const [searchParams, setSearchParams] = useSearchParams();

@@ -8,6 +8,7 @@ use App\Models\Certificate;
 use App\Models\ProfileChangeRequest;
 use App\Models\User;
 use App\Notifications\AppNotification;
+use App\Services\EncryptionService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -258,10 +259,14 @@ class ProfileChangeRequestController extends Controller
             'middle_name' => $user->student?->forceFill(['middle_name' => $value])->save(),
             'last_name' => $user->student?->forceFill(['last_name' => $value])->save(),
             'date_of_birth' => $user->student?->forceFill(['date_of_birth' => $value])->save(),
-            'nid' => $user->student?->forceFill(['nid_hash' => hash('sha256', $value)])->save(),
+            'nid' => $user->student?->forceFill([
+                'nid_hash'      => hash('sha256', $value),
+                'nid_encrypted' => EncryptionService::encryptNid($value),
+            ])->save(),
             'name' => $user->institution?->forceFill(['name' => $value])->save(),
             'registration_number' => $user->institution?->forceFill(['registration_number' => $value])->save(),
             'company_name' => $user->verifier?->forceFill(['company_name' => $value])->save(),
+            'website' => $user->verifier?->forceFill(['website' => $value])->save(),
             default => null,
         };
     }
@@ -314,6 +319,7 @@ class ProfileChangeRequestController extends Controller
             'name' => 'Institution Name',
             'registration_number' => 'Registration Number',
             'company_name' => 'Company Name',
+            'website' => 'Company Link / Website',
             default => $fieldName,
         };
     }

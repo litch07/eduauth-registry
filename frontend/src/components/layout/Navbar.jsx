@@ -1,108 +1,120 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Bell, Menu, MoonStar, SunMedium, LogOut, ShieldCheck, CheckCheck } from 'lucide-react';
+import { Menu, Moon, Sun, LogOut, Loader2 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
-import { roleLabel } from '../../utils/helpers';
-import SearchBar from '../shared/SearchBar';
+
 import NotificationDropdown from '../notifications/NotificationDropdown';
 import { useOutsideClick } from '../../hooks/useOutsideClick';
+import Logo from '../shared/Logo';
 
 export default function Navbar({ onMenuClick }) {
   const { user, logout } = useAuth();
   const { isDark, toggleTheme } = useTheme();
   const [openUserMenu, setOpenUserMenu] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const userMenuRef = useRef(null);
 
   useOutsideClick(userMenuRef, () => setOpenUserMenu(false));
 
   const handleLogout = async () => {
-    await logout();
-    window.location.href = '/login';
+    setIsLoggingOut(true);
+    try {
+      await logout();
+      window.location.href = '/login';
+    } catch (error) {
+      setIsLoggingOut(false);
+    }
   };
 
   const displayName = user?.name || user?.email?.split('@')[0] || 'User';
+  
+  const getInitials = (name) => {
+    const parts = name.trim().split(' ');
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    }
+    return name.substring(0, 2).toUpperCase();
+  };
+  const initials = getInitials(displayName);
 
   return (
-    <header className="sticky top-0 z-40 border-b border-gray-200/70 bg-white/80 backdrop-blur-lg dark:border-gray-800 dark:bg-gray-900/80">
-      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center gap-3">
-          <button onClick={onMenuClick} className="rounded-lg p-2 text-gray-600 hover:bg-gray-100 lg:hidden dark:text-gray-300 dark:hover:bg-gray-800" aria-label="Open menu">
-            <Menu className="h-5 w-5" />
-          </button>
-          <Link to={user ? `/${user.role}/dashboard` : "/"} className="flex items-center gap-2.5 group">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary-600 text-white shadow-md shadow-primary-600/25 transition group-hover:shadow-lg group-hover:shadow-primary-600/30">
-              <ShieldCheck className="h-4.5 w-4.5" />
-            </div>
-            <div>
-              <p className="text-sm font-bold text-gray-900 dark:text-white">EduAuth</p>
-              <p className="text-xs text-gray-500 dark:text-gray-400">{user ? roleLabel(user.role) : 'Public Access'}</p>
-            </div>
-          </Link>
-        </div>
+    <header className="fixed top-0 left-0 right-0 z-40 h-[56px] bg-[var(--bg-surface)] border-b border-[var(--border)] flex items-center justify-between px-4 sm:px-6 lg:px-8">
+      <div className="flex items-center gap-3">
+        <button onClick={onMenuClick} className="lg:hidden p-2 text-[var(--text-secondary)] hover:text-[var(--text-primary)]" aria-label="Open menu">
+          <Menu className="w-5 h-5" />
+        </button>
+        <Link to={user ? `/${user.role}/dashboard` : "/"} className="flex items-center gap-2 group">
+          <Logo className="h-7 w-auto" />
+          <div className="flex items-baseline gap-1">
+            <span className="font-semibold text-[var(--text-primary)] hidden sm:block">EduAuth</span>
+            <span className="font-normal text-[var(--text-muted)] hidden md:block">Registry</span>
+          </div>
+        </Link>
+      </div>
 
-        <div className="hidden flex-1 px-8 lg:flex justify-center max-w-2xl">
-          {user && <SearchBar />}
-        </div>
+      <div className="flex items-center gap-2 h-full">
+        <button
+          onClick={toggleTheme}
+          className="w-[36px] h-[36px] flex items-center justify-center rounded-md text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] hover:text-[var(--text-primary)] transition-colors"
+          aria-label="Toggle theme"
+        >
+          {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+        </button>
 
-        <div className="flex items-center gap-2 sm:gap-3">
-          <button
-            onClick={toggleTheme}
-            className="rounded-lg p-2 text-gray-500 transition hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800"
-            aria-label="Toggle theme"
-          >
-            {isDark ? <SunMedium className="h-4 w-4" /> : <MoonStar className="h-4 w-4" />}
-          </button>
+        {user && <NotificationDropdown />}
 
-          {user && <NotificationDropdown />}
+        {user && (
+          <div className="relative" ref={userMenuRef}>
+            <button
+              onClick={() => setOpenUserMenu(!openUserMenu)}
+              className="w-[36px] h-[36px] flex items-center justify-center rounded-full bg-[var(--brand-light)] text-[var(--brand)] text-[12px] font-medium transition-transform hover:scale-105"
+            >
+              {initials}
+            </button>
 
-          {user ? (
-            <div className="relative" ref={userMenuRef}>
-              <button
-                onClick={() => setOpenUserMenu((current) => !current)}
-                className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-full bg-primary-100 text-primary-700 transition hover:ring-2 hover:ring-primary-500 hover:ring-offset-2 dark:bg-primary-900/30 dark:text-primary-300 dark:hover:ring-offset-gray-900"
-                aria-label="User menu"
-              >
-                {/* Fallback to initial if no profile image is available */}
-                <span className="text-sm font-bold uppercase">{displayName.charAt(0)}</span>
-              </button>
-
-              {openUserMenu ? (
-                <div className="absolute right-0 mt-2 w-56 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-900">
-                  <div className="border-b border-gray-100 px-4 py-3 dark:border-gray-800">
-                    <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{displayName}</p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{user.email}</p>
-                  </div>
-                  <div className="p-2 border-b border-gray-100 dark:border-gray-800">
-                    <Link
-                      to="/profile"
-                      onClick={() => setOpenUserMenu(false)}
-                      className="block rounded-lg px-3 py-2 text-sm text-gray-700 transition hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
-                    >
-                      Profile Details
-                    </Link>
-                    <Link
-                      to="/settings"
-                      onClick={() => setOpenUserMenu(false)}
-                      className="block rounded-lg px-3 py-2 text-sm text-gray-700 transition hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
-                    >
-                      Account Settings
-                    </Link>
-                  </div>
-                  <div className="p-2">
-                    <button
-                      onClick={handleLogout}
-                      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-red-600 transition hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20"
-                    >
-                      <LogOut className="h-4 w-4" />
-                      Logout
-                    </button>
-                  </div>
+            {openUserMenu && (
+              <div className="absolute right-0 mt-2 w-48 bg-[var(--bg-surface)] border border-[var(--border)] rounded-lg shadow-lg py-1 z-50">
+                <div className="px-4 py-2 border-b border-[var(--border)]">
+                  <p className="font-bold text-[var(--text-primary)] truncate">{displayName}</p>
+                  <p className="text-xs text-[var(--text-muted)] capitalize truncate">{user.role}</p>
                 </div>
-              ) : null}
-            </div>
-          ) : null}
-        </div>
+                <div className="py-1">
+                  <Link
+                    to="/profile"
+                    onClick={() => setOpenUserMenu(false)}
+                    className="block px-4 py-2 text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] hover:text-[var(--text-primary)]"
+                  >
+                    Profile
+                  </Link>
+                  <Link
+                    to="/settings"
+                    onClick={() => setOpenUserMenu(false)}
+                    className="block px-4 py-2 text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] hover:text-[var(--text-primary)]"
+                  >
+                    Settings
+                  </Link>
+                </div>
+                <div className="border-t border-[var(--border)] py-1">
+                  <button
+                    onClick={handleLogout}
+                    disabled={isLoggingOut}
+                    className={`w-full text-left px-4 py-2 text-sm flex items-center gap-2 ${isLoggingOut ? 'text-gray-400 cursor-not-allowed' : 'text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10'}`}
+                  >
+                    {isLoggingOut ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Signing Out...
+                      </>
+                    ) : (
+                      'Sign Out'
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </header>
   );

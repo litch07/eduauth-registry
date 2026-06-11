@@ -65,15 +65,16 @@ class VerificationController extends Controller
 
             if ($registrationData['role'] === 'student') {
                 Student::create([
-                    'user_id' => $user->id,
-                    'first_name' => $registrationData['first_name'],
-                    'middle_name' => $registrationData['middle_name'] ?? null,
-                    'last_name' => $registrationData['last_name'],
-                    'nid_hash' => $registrationData['nid_hash'],
+                    'user_id'       => $user->id,
+                    'first_name'    => $registrationData['first_name'],
+                    'middle_name'   => $registrationData['middle_name'] ?? null,
+                    'last_name'     => $registrationData['last_name'],
+                    'nid_hash'      => $registrationData['nid_hash'],
+                    'nid_encrypted' => $registrationData['nid_encrypted'] ?? null,
                     'date_of_birth' => $registrationData['date_of_birth'],
-                    'phone' => $registrationData['phone'],
-                    'address' => $registrationData['address'] ?? null,
-                    'student_id' => $registrationData['student_id'],
+                    'gender'        => $registrationData['gender'],
+                    'phone'         => $registrationData['phone'],
+                    'address'       => $registrationData['address'] ?? null,
                 ]);
             } elseif ($registrationData['role'] === 'university') {
                 Institution::create([
@@ -170,6 +171,26 @@ class VerificationController extends Controller
             'ip_address' => $request->ip(),
         ]);
 
+        try {
+            Mail::to($user->email)->send(
+                new \App\Mail\SendVerificationCode(
+                    $user->email,
+                    $verificationCode,
+                    $user->user_name
+                )
+            );
+        } catch (\Exception $mailException) {
+            \Log::error('Failed to send verification email during resend', [
+                'email' => $user->email,
+                'error' => $mailException->getMessage(),
+            ]);
+            
+            return response()->json([
+                'message' => 'Verification code resent, but there was an error sending the email.',
+                'verification_code' => app()->environment('local') ? $verificationCode : null,
+            ], 200);
+        }
+
         return response()->json([
             'message' => 'Verification code resent successfully.',
             'verification_code' => app()->environment('local') ? $verificationCode : null,
@@ -183,7 +204,7 @@ class VerificationController extends Controller
         if ($admins->isEmpty()) {
             \Log::warning('No admin email addresses were found for approval notification.', [
                 'user_id' => $user->id,
-                'email' => $user->email,
+                'email'   => $user->email,
             ]);
 
             return;
@@ -203,9 +224,54 @@ class VerificationController extends Controller
         } catch (\Throwable $throwable) {
             \Log::error('Failed to send admin approval notification', [
                 'user_id' => $user->id,
-                'email' => $user->email,
-                'error' => $throwable->getMessage(),
+                'email'   => $user->email,
+                'error'   => $throwable->getMessage(),
             ]);
         }
+    }
+
+    public function verifyEmailChange(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'token' => 'required|string',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        $user = User::where('pending_email_token', $request->token)
+            ->whereNotNull('pending_email')
+            ->where('pending_email_expires_at', '>', now())
+            ->first();
+
+        if (!$user) {
+            return response()->json(['error' => 'Invalid or expired verification link.'], 422);
+        }
+
+        DB::transaction(function () use ($user, $request) {
+            $newEmail = $user->pending_email;
+
+            $user->forceFill([
+                'email'                    => $newEmail,
+                'pending_email'            => null,
+                'pending_email_token'      => null,
+                'pending_email_expires_at' => null,
+            ])->save();
+
+            ActivityLog::create([
+                'user_id'     => $user->id,
+                'action'      => 'email_changed',
+                'entity_type' => User::class,
+                'entity_id'   => $user->id,
+                'description' => 'Email address changed and verified successfully.',
+                'metadata'    => ['new_email' => $newEmail],
+                'ip_address'  => $request->ip(),
+            ]);
+        });
+
+        return response()->json([
+            'message' => 'Email address updated successfully. You can now log in with your new email.',
+        ]);
     }
 }

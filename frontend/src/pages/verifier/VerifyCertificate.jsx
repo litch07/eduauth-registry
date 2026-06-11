@@ -3,15 +3,17 @@ import { Link, useSearchParams } from 'react-router-dom';
 import {
   ShieldCheck, Search, CheckCircle, XCircle, AlertCircle,
   RotateCcw, History, Clock, Loader2, Link2, ChevronRight,
-  BadgeCheck, Building2, Calendar, User, Hash, Award,
+  BadgeCheck, Building2, Calendar, User, Hash, Award, Info, Printer, Download
 } from 'lucide-react';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import Card from '../../components/shared/Card';
 import Button from '../../components/shared/Button';
 import Input from '../../components/shared/Input';
 import Badge from '../../components/shared/Badge';
+import Modal from '../../components/shared/Modal';
 import LoadingSpinner from '../../components/shared/LoadingSpinner';
 import api from '../../services/api';
+import { printVerificationReport, downloadVerificationPDF } from '../../utils/printVerification';
 
 function timeAgo(isoString) {
   if (!isoString) return '';
@@ -51,97 +53,8 @@ function DetailRow({ label, value, icon: Icon }) {
   );
 }
 
-function VerificationResult({ result, onReset, onRequestAccess }) {
-  if (!result) return null;
-
-  if (result.verified) {
-    const cert = result.certificate;
-    return (
-      <div className="rounded-2xl border-2 border-green-400 bg-green-50/60 dark:bg-green-900/10 dark:border-green-600 p-6 space-y-5">
-        <div className="flex items-center gap-3">
-          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-green-100 dark:bg-green-900/40">
-            <CheckCircle className="h-6 w-6 text-green-600 dark:text-green-400" />
-          </div>
-          <div>
-            <h2 className="text-lg font-bold text-green-800 dark:text-green-300">Certificate Verified Successfully</h2>
-            <p className="text-sm text-green-600 dark:text-green-400">This certificate is authentic and valid.</p>
-          </div>
-        </div>
-
-        <div className="rounded-xl bg-white dark:bg-gray-900/60 border border-gray-100 dark:border-gray-800 divide-y divide-gray-100 dark:divide-gray-800 px-4">
-          <DetailRow icon={Hash}      label="Serial Number"  value={cert.serial} />
-          <DetailRow icon={User}      label="Student Name"   value={cert.student_name} />
-          <DetailRow icon={BadgeCheck} label="Student ID"    value={cert.student_id} />
-          <DetailRow icon={Award}     label="Degree"         value={cert.degree_title} />
-          <DetailRow icon={Award}     label="Program"        value={cert.program_name} />
-          <DetailRow icon={Award}     label="Major"          value={cert.major} />
-          <DetailRow icon={Award}     label="CGPA"           value={cert.cgpa} />
-          <DetailRow icon={Building2} label="Institution"    value={cert.institution} />
-          <DetailRow icon={Calendar}  label="Issue Date"     value={cert.issue_date} />
-          <DetailRow icon={Calendar}  label="Completion"     value={cert.completion_date} />
-        </div>
-
-        <p className="text-xs text-gray-400 dark:text-gray-500">
-          Verified on {new Date().toLocaleString()}
-        </p>
-
-        <Button onClick={onReset} variant="secondary" className="w-full">
-          <RotateCcw className="mr-2 h-4 w-4" />
-          Verify Another Certificate
-        </Button>
-      </div>
-    );
-  }
-
-  if (result.status === 'revoked') {
-    return (
-      <div className="rounded-2xl border-2 border-amber-400 bg-amber-50/60 dark:bg-amber-900/10 dark:border-amber-600 p-6 space-y-5">
-        <div className="flex items-center gap-3">
-          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/40">
-            <AlertCircle className="h-6 w-6 text-amber-600 dark:text-amber-400" />
-          </div>
-          <div>
-            <h2 className="text-lg font-bold text-amber-800 dark:text-amber-300">⚠️ Certificate Revoked</h2>
-            <p className="text-sm text-amber-600 dark:text-amber-400">This certificate is no longer valid.</p>
-          </div>
-        </div>
-        <div className="rounded-xl bg-white dark:bg-gray-900/60 border border-gray-100 dark:border-gray-800 divide-y divide-gray-100 dark:divide-gray-800 px-4">
-          <DetailRow icon={Calendar} label="Revoked On"  value={result.revoked_at} />
-          <DetailRow icon={User}     label="Revoked By"  value={result.revoked_by} />
-          {result.revocation_reason && (
-            <DetailRow icon={AlertCircle} label="Reason" value={result.revocation_reason} />
-          )}
-        </div>
-        <p className="text-sm text-gray-500 dark:text-gray-400">For more information, contact the issuing institution.</p>
-        <Button onClick={onReset} variant="secondary" className="w-full">
-          <RotateCcw className="mr-2 h-4 w-4" /> Try Again
-        </Button>
-      </div>
-    );
-  }
-
-  // Not found / dob mismatch / private
-  return (
-    <div className="rounded-2xl border-2 border-red-300 bg-red-50/60 dark:bg-red-900/10 dark:border-red-700 p-6 space-y-5">
-      <div className="flex items-center gap-3">
-        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-100 dark:bg-red-900/40">
-          <XCircle className="h-6 w-6 text-red-600 dark:text-red-400" />
-        </div>
-        <div>
-          <h2 className="text-lg font-bold text-red-800 dark:text-red-300">❌ Certificate Not Found</h2>
-          <p className="text-sm text-red-600 dark:text-red-400">{result.message || 'No certificate found with the provided details.'}</p>
-        </div>
-      </div>
-      <ul className="text-sm text-gray-600 dark:text-gray-400 list-disc list-inside space-y-1">
-        <li>The serial number might be incorrect</li>
-        <li>The date of birth may not match our records</li>
-        <li>The certificate may have been revoked or removed</li>
-      </ul>
-      <Button onClick={onReset} variant="secondary" className="w-full">
-        <RotateCcw className="mr-2 h-4 w-4" /> Try Again
-      </Button>
-    </div>
-  );
+function Divider() {
+  return <hr className="border-gray-100 dark:border-gray-800 my-1" />;
 }
 
 export default function VerifierVerifyCertificate() {
@@ -155,6 +68,7 @@ export default function VerifierVerifyCertificate() {
   const [recentLoading, setRecentLoading] = useState(true);
   const [error, setError] = useState('');
   const [validationErrors, setValidationErrors] = useState({});
+  const [showInstructions, setShowInstructions] = useState(false);
   const serialRef = useRef(null);
   const hasAutoVerified = useRef(false);
 
@@ -287,19 +201,34 @@ export default function VerifierVerifyCertificate() {
         </div>
 
         {/* Verification form + result on the left, recent verifications on the right */}
-        <div className="grid gap-6 lg:grid-cols-[3fr_2fr]">
+        <div className="grid gap-6 lg:grid-cols-[3fr_2fr] items-stretch">
           {/* Verification Form */}
-          <div className="space-y-6">
-            <Card>
-              <div className="flex gap-1 p-1 bg-gray-100 dark:bg-gray-800 rounded-xl mb-5">
+          <div className="flex flex-col">
+            <Card className="flex flex-col h-full flex-1">
+              {/* Card Header matching the right side */}
+              <div className="flex items-center justify-between mb-5">
+                <h2 className="font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                  <ShieldCheck className="h-4 w-4 text-primary-600" />
+                  Verify Details
+                </h2>
+                <button 
+                  onClick={() => setShowInstructions(true)} 
+                  className="flex items-center gap-1 text-xs font-medium text-primary-600 hover:text-primary-700 dark:text-primary-400 transition-colors"
+                >
+                  <Info className="w-3.5 h-3.5" /> How it works
+                </button>
+              </div>
+
+              {/* Tabs Segmented Control */}
+              <div className="flex gap-1 p-1 bg-gray-50 border border-gray-100 dark:bg-gray-800/50 dark:border-gray-800 rounded-xl mb-6">
                 {TABS.map(({ id, label, icon: Icon }) => (
                   <button
                     key={id}
                     onClick={() => { setTab(id); setError(''); }}
-                    className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition ${
+                    className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
                       tab === id
-                        ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white'
-                        : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
+                        ? 'bg-white text-primary-600 shadow-sm border border-gray-200/50 dark:bg-gray-800 dark:text-primary-400 dark:border-gray-700'
+                        : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white hover:bg-gray-100/50 dark:hover:bg-gray-700/50'
                     }`}
                   >
                     <Icon className="h-4 w-4" />
@@ -316,104 +245,106 @@ export default function VerifierVerifyCertificate() {
                 </div>
               )}
 
-              {/* Manual Entry Tab */}
-              {tab === 'manual' && (
-                <form onSubmit={handleManualVerify} className="space-y-4">
-                  <Input
-                    ref={serialRef}
-                    label="Certificate Serial Number"
-                    placeholder="e.g., BSC-26-000001M"
-                    value={formData.serial}
-                    onChange={updateField('serial')}
-                    error={validationErrors.serial?.[0]}
-                    required
-                  />
-                  <Input
-                    type="date"
-                    label="Student Date of Birth"
-                    value={formData.date_of_birth}
-                    onChange={updateField('date_of_birth')}
-                    error={validationErrors.date_of_birth?.[0]}
-                    required
-                  />
-                  <div className="flex gap-3">
-                    <Button type="submit" className="flex-1" disabled={loading}>
-                      {loading ? (
-                        <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Verifying...</>
-                      ) : (
-                        <><ShieldCheck className="mr-2 h-4 w-4" />Verify Certificate</>
-                      )}
-                    </Button>
-                    {(formData.serial || formData.date_of_birth) && (
-                      <Button type="button" variant="secondary" onClick={handleReset}>
-                        <RotateCcw className="h-4 w-4" />
+              {/* Tab Contents Area */}
+              <div className="flex-1 flex flex-col mb-8">
+                {/* Manual Entry Tab */}
+                {tab === 'manual' && (
+                  <form onSubmit={handleManualVerify} className="space-y-5">
+                    <div className="space-y-5">
+                      <Input
+                        ref={serialRef}
+                        label="Certificate Serial Number"
+                        placeholder="e.g., BSC-26-000001M"
+                        value={formData.serial}
+                        onChange={updateField('serial')}
+                        error={validationErrors.serial?.[0]}
+                        required
+                      />
+                      <Input
+                        type="date"
+                        label="Student Date of Birth"
+                        value={formData.date_of_birth}
+                        onChange={updateField('date_of_birth')}
+                        error={validationErrors.date_of_birth?.[0]}
+                        required
+                      />
+                    </div>
+                    <div className="flex gap-3 pt-2">
+                      <Button type="submit" className="flex-1" disabled={loading}>
+                        {loading ? (
+                          <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Verifying...</>
+                        ) : (
+                          <><ShieldCheck className="mr-2 h-4 w-4" />Verify Certificate</>
+                        )}
                       </Button>
-                    )}
-                  </div>
-                </form>
-              )}
+                      {(formData.serial || formData.date_of_birth) && (
+                        <Button type="button" variant="secondary" onClick={handleReset}>
+                          <RotateCcw className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                  </form>
+                )}
 
-              {/* Paste Link Tab */}
-              {tab === 'link' && (
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
-                      Certificate Share Link
-                    </label>
-                    <textarea
-                      value={linkInput}
-                      onChange={(e) => setLinkInput(e.target.value)}
-                      placeholder="Paste the share link here (e.g., https://eduauth.app/verify?s=BSC-26-...&v=...)"
-                      rows={3}
-                      className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm text-gray-900 placeholder-gray-400 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 dark:border-gray-700 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500 resize-none"
-                    />
+                {/* Paste Link Tab */}
+                {tab === 'link' && (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                        Certificate Share Link
+                      </label>
+                      <div className="relative group">
+                        <div className="absolute top-2.5 left-3 flex items-start pointer-events-none">
+                          <Link2 className="h-5 w-5 text-gray-400 group-focus-within:text-primary-500 transition-colors" />
+                        </div>
+                        <textarea
+                          value={linkInput}
+                          onChange={(e) => setLinkInput(e.target.value)}
+                          placeholder="https://eduauth.app/verify?s=..."
+                          rows={3}
+                          className="w-full rounded-xl border border-gray-300 bg-white pl-10 pr-4 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500 resize-none transition-all"
+                        />
+                      </div>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                        Paste the full verification URL. It should contain both the student's serial number and the secure token.
+                      </p>
+                    </div>
+                    <div className="flex gap-3 pt-1">
+                      <Button onClick={handlePasteLinkVerify} className="flex-1" disabled={loading}>
+                        {loading ? (
+                          <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Verifying...</>
+                        ) : (
+                          <><ShieldCheck className="mr-2 h-4 w-4" />Verify from Link</>
+                        )}
+                      </Button>
+                      {linkInput && (
+                        <Button type="button" variant="secondary" onClick={handleReset}>
+                          <RotateCcw className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
                   </div>
-                  <Button onClick={handlePasteLinkVerify} className="w-full" disabled={loading}>
-                    {loading ? (
-                      <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Verifying...</>
-                    ) : (
-                      <><Link2 className="mr-2 h-4 w-4" />Verify from Link</>
-                    )}
-                  </Button>
+                )}
+              </div>
+
+              {/* Secure Verification Footer */}
+              <div className="mt-auto pt-5 border-t border-gray-100 dark:border-gray-800 flex items-start gap-3">
+                <div className="mt-0.5 p-1.5 bg-green-50 dark:bg-green-900/20 rounded-lg">
+                  <ShieldCheck className="h-4 w-4 text-green-600 dark:text-green-500" />
                 </div>
-              )}
+                <div>
+                  <h4 className="text-sm font-medium text-gray-900 dark:text-white">Secure Verification</h4>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 leading-relaxed">
+                    Results are cross-checked against our immutable database to ensure absolute authenticity.
+                  </p>
+                </div>
+              </div>
             </Card>
-
-            {/* Verification Result */}
-            {loading && !result && (
-              <Card>
-                <div className="flex flex-col items-center justify-center py-10 gap-4">
-                  <div className="h-14 w-14 flex items-center justify-center rounded-full bg-primary-50 dark:bg-primary-900/30">
-                    <ShieldCheck className="h-7 w-7 text-primary-600 dark:text-primary-400 animate-pulse" />
-                  </div>
-                  <div className="text-center">
-                    <p className="font-semibold text-gray-900 dark:text-white">Verifying Certificate</p>
-                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Please wait a moment...</p>
-                  </div>
-                  <Loader2 className="h-5 w-5 animate-spin text-primary-600" />
-                </div>
-              </Card>
-            )}
-
-            {result && (
-              <VerificationResult result={result} onReset={handleReset} />
-            )}
-
-            {!result && !loading && (
-              <Card>
-                <div className="flex flex-col items-center py-10 gap-3 text-center">
-                  <div className="h-14 w-14 flex items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800">
-                    <ShieldCheck className="h-7 w-7 text-gray-300 dark:text-gray-600" />
-                  </div>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">Verification result will appear here</p>
-                </div>
-              </Card>
-            )}
           </div>
 
           {/* Recent Verifications */}
-          <div className="space-y-4">
-            <Card>
+          <div className="flex flex-col">
+            <Card className="flex flex-col h-full flex-1">
               <div className="flex items-center justify-between mb-5">
                 <h2 className="font-semibold text-gray-900 dark:text-white flex items-center gap-2">
                   <Clock className="h-4 w-4 text-primary-600" />
@@ -428,11 +359,11 @@ export default function VerifierVerifyCertificate() {
               </div>
 
               {recentLoading ? (
-                <div className="flex justify-center py-6">
+                <div className="flex-1 flex justify-center items-center py-10">
                   <LoadingSpinner />
                 </div>
               ) : recentVerifications.length === 0 ? (
-                <div className="flex flex-col items-center py-8 gap-3 text-center">
+                <div className="flex-1 flex flex-col items-center justify-center py-10 gap-3 text-center">
                   <div className="h-12 w-12 flex items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800">
                     <History className="h-6 w-6 text-gray-300 dark:text-gray-600" />
                   </div>
@@ -443,7 +374,7 @@ export default function VerifierVerifyCertificate() {
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {recentVerifications.slice(0, 3).map((item) => {
+                  {recentVerifications.slice(0, 5).map((item) => {
                     const cfg = STATUS_CONFIG[item.status] || { label: item.status, color: 'default', bg: 'gray' };
                     const StatusIcon = cfg.icon || ShieldCheck;
                     return (
@@ -479,18 +410,153 @@ export default function VerifierVerifyCertificate() {
               )}
             </Card>
 
-            {/* Tips card */}
-            <Card>
-              <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">How to verify</h3>
-              <ol className="space-y-2 text-sm text-gray-500 dark:text-gray-400">
-                <li className="flex gap-2"><span className="font-bold text-primary-600 flex-shrink-0">1.</span>Enter the serial number (found on the certificate PDF)</li>
-                <li className="flex gap-2"><span className="font-bold text-primary-600 flex-shrink-0">2.</span>Enter the student's date of birth as shown on official documents</li>
-                <li className="flex gap-2"><span className="font-bold text-primary-600 flex-shrink-0">3.</span>Or paste a share link if the student shared a verification URL</li>
-              </ol>
-            </Card>
+            {/* End Recent Verifications */}
           </div>
         </div>
       </div>
+
+      {/* Verification Result Modal */}
+      <Modal open={!!result || loading} onClose={handleReset} title={loading ? "Verifying Certificate" : "Verification Result"} size="md">
+        {loading && !result ? (
+          <div className="flex flex-col items-center justify-center py-12 gap-4">
+            <div className="h-16 w-16 flex items-center justify-center rounded-full bg-primary-100 dark:bg-primary-900/30">
+              <ShieldCheck className="h-8 w-8 text-primary-600 dark:text-primary-400 animate-pulse" />
+            </div>
+            <div className="text-center">
+              <p className="text-lg font-semibold text-gray-900 dark:text-white">Verifying details securely...</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Please wait a moment while we check the blockchain/database.</p>
+            </div>
+            <Loader2 className="h-6 w-6 mt-4 animate-spin text-primary-600" />
+          </div>
+        ) : result && (
+          result.verified ? (
+            <div className="space-y-4">
+              <div className="flex items-center gap-2">
+                <CheckCircle className="w-6 h-6 text-green-500" />
+                <h2 className="text-xl font-bold text-green-600 dark:text-green-500">Certificate Verified Successfully</h2>
+              </div>
+
+              <div className="space-y-0.5 bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-800 rounded-xl p-4">
+                <DetailRow label="Serial Number" value={result.certificate.serial} />
+                <DetailRow label="Student Name" value={result.certificate.student_name} />
+                <DetailRow label="Student ID" value={result.certificate.student_id} />
+                <Divider />
+                <DetailRow label="Degree Title" value={result.certificate.certificate_level || result.certificate.degree_title} />
+                <DetailRow label="Program" value={result.certificate.program || result.certificate.program_name} />
+                <DetailRow label="Major" value={result.certificate.major || 'N/A'} />
+                <Divider />
+                <DetailRow label="CGPA" value={result.certificate.cgpa || 'N/A'} />
+                <DetailRow label="Registration No" value={result.certificate.registration_no || 'N/A'} />
+                <Divider />
+                <DetailRow label="Issue Date" value={result.certificate.issue_date} />
+                <DetailRow label="Completion Date" value={result.certificate.completion_date || 'N/A'} />
+                <Divider />
+                <DetailRow label="Institution" value={result.certificate.institution} />
+              </div>
+
+              <div className="flex gap-3">
+                <Button onClick={() => printVerificationReport(result)} variant="outline" className="flex-1">
+                  <Printer className="mr-2 h-4 w-4" />
+                  Print
+                </Button>
+                <Button onClick={() => downloadVerificationPDF(result)} className="flex-1">
+                  <Download className="mr-2 h-4 w-4" />
+                  Save PDF
+                </Button>
+              </div>
+            </div>
+          ) : result.status === 'revoked' ? (
+            <div className="space-y-4 py-6 text-center">
+              <AlertCircle className="w-12 h-12 text-amber-500 mx-auto" />
+              <div>
+                <p className="text-lg font-bold text-amber-600 dark:text-amber-500">Certificate Revoked</p>
+                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                  This certificate was revoked on {result.revoked_at}.
+                </p>
+                {result.revocation_reason && (
+                  <p className="mt-2 text-sm text-gray-400 dark:text-gray-500">
+                    Reason: {result.revocation_reason}
+                  </p>
+                )}
+              </div>
+              <div className="flex gap-3 mt-4">
+                <Button onClick={() => printVerificationReport(result)} variant="outline" className="flex-1">
+                  <Printer className="mr-2 h-4 w-4" />
+                  Print Report
+                </Button>
+                <Button onClick={() => downloadVerificationPDF(result)} className="flex-1 bg-amber-600 hover:bg-amber-700 text-white border-transparent">
+                  <Download className="mr-2 h-4 w-4" />
+                  Save PDF
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4 py-8 text-center">
+              <XCircle className="w-12 h-12 text-red-500 mx-auto" />
+              <p className="text-lg font-bold text-red-600 dark:text-red-500">
+                Verification Failed
+              </p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                {result.message || error || 'Unable to verify this certificate'}
+              </p>
+              <div className="mt-4 bg-red-50 dark:bg-red-900/20 rounded-xl p-4 text-left border border-red-100 dark:border-red-900/30">
+                <p className="text-sm font-semibold text-red-800 dark:text-red-300 mb-2">How to solve this:</p>
+                <ul className="text-sm text-red-700 dark:text-red-400 list-disc list-inside space-y-1.5">
+                  <li>Double check the serial number for typos</li>
+                  <li>Ensure the date of birth is exactly as registered</li>
+                  <li>If using a share link, it might be expired or invalid</li>
+                  <li>Contact the issuing institution if the issue persists</li>
+                </ul>
+              </div>
+              <Button onClick={handleReset} variant="secondary" className="w-full">
+                Close
+              </Button>
+            </div>
+          )
+        )}
+      </Modal>
+
+      {/* How to use Modal */}
+      <Modal open={showInstructions} onClose={() => setShowInstructions(false)} title={tab === 'manual' ? "How to Verify Manually" : "How to Verify via Link"} size="sm">
+        <div className="space-y-4">
+          {tab === 'manual' ? (
+            <ol className="space-y-3 text-sm text-gray-600 dark:text-gray-300">
+              <li className="flex gap-3 items-start">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary-100 text-xs font-bold text-primary-600 dark:bg-primary-900/30 dark:text-primary-400">1</span>
+                <span><strong>Enter the serial number</strong>: Locate the serial number on the certificate (usually starts with something like BSC-).</span>
+              </li>
+              <li className="flex gap-3 items-start">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary-100 text-xs font-bold text-primary-600 dark:bg-primary-900/30 dark:text-primary-400">2</span>
+                <span><strong>Enter the date of birth</strong>: Provide the student's date of birth exactly as it appears on their official documents.</span>
+              </li>
+              <li className="flex gap-3 items-start">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary-100 text-xs font-bold text-primary-600 dark:bg-primary-900/30 dark:text-primary-400">3</span>
+                <span><strong>Verify</strong>: Click "Verify Certificate" to cross-check our secure database.</span>
+              </li>
+            </ol>
+          ) : (
+            <ol className="space-y-3 text-sm text-gray-600 dark:text-gray-300">
+              <li className="flex gap-3 items-start">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary-100 text-xs font-bold text-primary-600 dark:bg-primary-900/30 dark:text-primary-400">1</span>
+                <span><strong>Copy the link</strong>: Obtain the secure verification link shared by the student (e.g., from an email).</span>
+              </li>
+              <li className="flex gap-3 items-start">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary-100 text-xs font-bold text-primary-600 dark:bg-primary-900/30 dark:text-primary-400">2</span>
+                <span><strong>Paste the link</strong>: Insert the full URL into the input field. Make sure it contains both the serial parameter (s=...) and the verification token (v=...).</span>
+              </li>
+              <li className="flex gap-3 items-start">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary-100 text-xs font-bold text-primary-600 dark:bg-primary-900/30 dark:text-primary-400">3</span>
+                <span><strong>Verify</strong>: Click "Verify from Link" to instantly validate the certificate.</span>
+              </li>
+            </ol>
+          )}
+          <div className="pt-4 flex justify-end">
+            <Button onClick={() => setShowInstructions(false)} variant="secondary">
+              Got it
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </DashboardLayout>
   );
 }

@@ -14,6 +14,9 @@ class Enrollment extends Model
         'student_id',
         'institution_id',
         'enrollment_number',
+        'roll_number',
+        'department_id',
+        'major_id',
         'program',
         'batch',
         'status',
@@ -22,6 +25,7 @@ class Enrollment extends Model
         'expected_graduation_date',
         'actual_graduation_date',
         'enrolled_by',
+        'certificate_level_id',
     ];
 
     protected $casts = [
@@ -48,6 +52,21 @@ class Enrollment extends Model
     public function enrolledBy()
     {
         return $this->belongsTo(User::class, 'enrolled_by');
+    }
+
+    public function major()
+    {
+        return $this->belongsTo(Major::class);
+    }
+
+    public function certificateLevel()
+    {
+        return $this->belongsTo(CertificateLevel::class);
+    }
+
+    public function department()
+    {
+        return $this->belongsTo(Department::class);
     }
 
     public function withdrawalRequests()

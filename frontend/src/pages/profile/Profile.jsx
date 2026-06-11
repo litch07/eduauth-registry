@@ -1,8 +1,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import toast from 'react-hot-toast';
-import { GraduationCap, AlertCircle, LogOut, Clock, Lock, Send, XCircle, Upload, FileText } from 'lucide-react';
+import { GraduationCap, AlertCircle, LogOut, Clock, Lock, Send, XCircle, Upload, FileText, Mail, ShieldAlert } from 'lucide-react';
 import Modal from '../../components/shared/Modal';
-import SettingsLayout from '../../components/layout/SettingsLayout';
+import DashboardLayout from '../../components/layout/DashboardLayout';
 import Card from '../../components/shared/Card';
 import Button from '../../components/shared/Button';
 import Input from '../../components/shared/Input';
@@ -20,7 +20,7 @@ const FIELD_CONFIG = {
       { key: 'middle_name', label: 'Middle Name', fixed: true },
       { key: 'last_name', label: 'Last Name', fixed: true },
       { key: 'date_of_birth', label: 'Date of Birth', fixed: true },
-      { key: 'nid_hash', label: 'National ID (Masked)', fixed: true },
+      { key: 'nid_display', label: 'NID / Birth Certificate', fixed: true },
       { key: 'student_id', label: 'Student ID', fixed: true },
       { key: 'email', label: 'Email', editable: true },
       { key: 'phone', label: 'Phone', editable: true },
@@ -142,12 +142,28 @@ export default function Profile() {
       const { data } = await api.put('/profile', editForm);
       setProfile(data.profile);
       if (data.user) updateLocalUser(data.user);
-      setEditing(false);
-      toast.success('Profile updated successfully.');
+      if (data.email_change_pending) {
+        setEditing(false);
+        toast.success(data.message || 'Profile updated.', { icon: '📧' });
+      } else {
+        setEditing(false);
+        toast.success('Profile updated successfully.');
+      }
     } catch (error) {
       toast.error(error.response?.data?.message || 'Profile update failed.');
     } finally {
       setSavingProfile(false);
+    }
+  };
+
+  const cancelEmailChange = async () => {
+    try {
+      const { data } = await api.delete('/profile/email-change');
+      setProfile(data.profile);
+      if (data.user) updateLocalUser(data.user);
+      toast.success('Email change cancelled.');
+    } catch (_err) {
+      toast.error('Failed to cancel email change.');
     }
   };
 
@@ -163,14 +179,14 @@ export default function Profile() {
 
   if (loading) {
     return (
-      <SettingsLayout>
+      <DashboardLayout>
         <div className="flex min-h-[50vh] items-center justify-center"><LoadingSpinner /></div>
-      </SettingsLayout>
+      </DashboardLayout>
     );
   }
 
   return (
-    <SettingsLayout>
+    <DashboardLayout>
       <div className="space-y-6">
         <div>
           <p className="text-sm font-semibold uppercase tracking-[0.15em] text-primary-600">Profile</p>
@@ -180,6 +196,26 @@ export default function Profile() {
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{roleLabel(user?.role)}</p>
         </div>
 
+        {/* ─── PENDING EMAIL CHANGE BANNER ─── */}
+        {profile?.pending_email && (
+          <div className="flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50 p-4 dark:border-blue-700/50 dark:bg-blue-900/20">
+            <Mail className="mt-0.5 h-5 w-5 shrink-0 text-blue-500 dark:text-blue-400" />
+            <div className="flex-1 text-sm">
+              <p className="font-semibold text-blue-800 dark:text-blue-300">Email change pending verification</p>
+              <p className="mt-0.5 text-blue-700 dark:text-blue-400">
+                A verification link has been sent to{' '}
+                <span className="font-mono font-medium">{profile.pending_email}</span>.
+                {' '}Your email will not change until you click the link in that email.
+              </p>
+            </div>
+            <button
+              onClick={cancelEmailChange}
+              className="shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-100 dark:text-blue-300 dark:hover:bg-blue-800/40 transition"
+            >
+              Cancel Change
+            </button>
+          </div>
+        )}
         {/* ─── PROFILE INFO CARD ─── */}
         <Card>
           <div className="flex items-center justify-between gap-4">
@@ -214,7 +250,29 @@ export default function Profile() {
                       )}
                     </div>
                     <p className="mt-1 text-sm text-gray-900 dark:text-gray-100">
-                      {profile?.[field.key] || <span className="italic text-gray-400">Not assigned</span>}
+                      {field.key === 'nid_display'
+                        ? (() => {
+                            const val = profile?.[field.key];
+                            if (!val)
+                              return (
+                                <span className="italic text-gray-400">
+                                  NID registered (not displayable)
+                                </span>
+                              );
+                            if (val.startsWith('NID on file'))
+                              return <span className="italic text-gray-400 text-xs">{val}</span>;
+                            return (
+                              <span
+                                className="inline-flex items-center gap-1.5 font-mono tracking-wider"
+                                title="Your NID is partially hidden for security."
+                              >
+                                <ShieldAlert className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+                                {val}
+                              </span>
+                            );
+                          })()
+                        : (profile?.[field.key] || <span className="italic text-gray-400">Not assigned</span>)
+                      }
                     </p>
                   </div>
                 ))}
@@ -438,7 +496,7 @@ export default function Profile() {
           />
         )}
       </div>
-    </SettingsLayout>
+    </DashboardLayout>
   );
 }
 

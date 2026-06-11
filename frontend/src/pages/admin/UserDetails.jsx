@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
+import { QRCodeSVG } from 'qrcode.react';
 import {
   ArrowLeft, GraduationCap, Building2, ShieldCheck, UserCog, Eye,
   CheckCircle, XCircle, Clock, Mail, Calendar, Hash, User, Award,
   FileText, Activity, BookOpen, ExternalLink, UserCheck, ChevronLeft,
-  ChevronRight, RotateCcw,
+  ChevronRight, RotateCcw, Copy, Check,
 } from 'lucide-react';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import Card from '../../components/shared/Card';
@@ -16,6 +17,7 @@ import Modal from '../../components/shared/Modal';
 import RestoreModal from '../../components/shared/RestoreModal';
 import StatusTimeline from '../../components/shared/StatusTimeline';
 import api from '../../services/api';
+import { formatDate } from '../../utils/helpers';
 
 const ROLE_CONFIG = {
   student:    { label: 'Student',    color: 'primary', icon: GraduationCap, bg: 'primary' },
@@ -27,20 +29,24 @@ const ROLE_CONFIG = {
 function InfoRow({ icon: Icon, label, value }) {
   if (value === undefined || value === null || value === '') return null;
   return (
-    <div className="flex items-start gap-3 py-2.5 border-b border-gray-100 dark:border-gray-800 last:border-0">
+    <div className="flex items-start gap-3 py-1.5 border-b border-gray-100 dark:border-gray-800 last:border-0">
       {Icon && <Icon className="mt-0.5 h-4 w-4 flex-shrink-0 text-gray-400" />}
       <span className="w-40 flex-shrink-0 text-sm text-gray-500 dark:text-gray-400">{label}</span>
-      <span className="text-sm font-medium text-gray-900 dark:text-white break-all">{String(value)}</span>
+      <span className="text-sm font-medium text-gray-900 dark:text-white break-words">{String(value)}</span>
     </div>
   );
 }
 
-function StatBox({ label, value, color = 'primary' }) {
+function StatBox({ label, value, color = 'primary', onClick }) {
+  const Component = onClick ? 'button' : 'div';
   return (
-    <div className="rounded-xl border border-gray-100 dark:border-gray-800 p-4 text-center">
+    <Component 
+      onClick={onClick}
+      className={`rounded-xl border border-gray-100 dark:border-gray-800 p-4 text-center ${onClick ? 'hover:border-primary-300 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition cursor-pointer w-full focus:outline-none' : ''}`}
+    >
       <p className={`text-2xl font-bold text-${color}-600 dark:text-${color}-400`}>{value ?? 0}</p>
       <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{label}</p>
-    </div>
+    </Component>
   );
 }
 
@@ -102,6 +108,10 @@ export default function AdminUserDetails() {
   const [activityTotal, setActivityTotal] = useState(0);
   const [activityLoading, setActivityLoading] = useState(false);
 
+  // Filters
+  const [certsFilter, setCertsFilter] = useState('all');
+  const [enrollsFilter, setEnrollsFilter] = useState('all');
+
   // Certificate detail modal
   const [certDetail, setCertDetail] = useState(null);
   const [certDetailLoading, setCertDetailLoading] = useState(false);
@@ -110,9 +120,18 @@ export default function AdminUserDetails() {
   const [restoreTarget, setRestoreTarget] = useState(null);
   const [restoreLoading, setRestoreLoading] = useState(false);
 
+  // Revoke modal
+  const [revokeTarget, setRevokeTarget] = useState(null);
+  const [revokeLoading, setRevokeLoading] = useState(false);
+  const [certRevokeReason, setCertRevokeReason] = useState('');
+
   // Reject modal
   const [showReject, setShowReject] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
+
+  // Suspend modal
+  const [showSuspend, setShowSuspend] = useState(false);
+  const [suspendReason, setSuspendReason] = useState('');
 
   const fetchUser = useCallback(async () => {
     setLoading(true);
@@ -130,7 +149,9 @@ export default function AdminUserDetails() {
   const fetchCertificates = useCallback(async (page = 1) => {
     setCertsLoading(true);
     try {
-      const { data } = await api.get(`/admin/users/${id}/certificates`, { params: { page } });
+      const params = { page };
+      if (certsFilter !== 'all') params.status = certsFilter;
+      const { data } = await api.get(`/admin/users/${id}/certificates`, { params });
       setCertificates(data.data || []);
       setCertsPage(data.current_page || 1);
       setCertsLastPage(data.last_page || 1);
@@ -140,12 +161,14 @@ export default function AdminUserDetails() {
     } finally {
       setCertsLoading(false);
     }
-  }, [id]);
+  }, [id, certsFilter]);
 
   const fetchEnrollments = useCallback(async (page = 1) => {
     setEnrollLoading(true);
     try {
-      const { data } = await api.get(`/admin/users/${id}/enrollments`, { params: { page } });
+      const params = { page };
+      if (enrollsFilter !== 'all') params.status = enrollsFilter;
+      const { data } = await api.get(`/admin/users/${id}/enrollments`, { params });
       setEnrollments(data.data || []);
       setEnrollPage(data.current_page || 1);
       setEnrollLastPage(data.last_page || 1);
@@ -155,7 +178,7 @@ export default function AdminUserDetails() {
     } finally {
       setEnrollLoading(false);
     }
-  }, [id]);
+  }, [id, enrollsFilter]);
 
   const fetchActivity = useCallback(async (page = 1) => {
     setActivityLoading(true);
@@ -179,7 +202,23 @@ export default function AdminUserDetails() {
     if (tab === 'certificates') fetchCertificates(1);
     if (tab === 'enrollments') fetchEnrollments(1);
     if (tab === 'activity') fetchActivity(1);
-  }, [tab, user]);
+  }, [tab, user, fetchCertificates, fetchEnrollments, fetchActivity]);
+
+  const handleStatClick = (statKey) => {
+    if (statKey.includes('certificate')) {
+      if (statKey.includes('revoked')) setCertsFilter('revoked');
+      else setCertsFilter('all');
+      setTab('certificates');
+    } else if (statKey.includes('enroll')) {
+      if (statKey.includes('active')) setEnrollsFilter('active');
+      else if (statKey.includes('withdrawn')) setEnrollsFilter('withdrawn');
+      else if (statKey.includes('graduated')) setEnrollsFilter('graduated');
+      else setEnrollsFilter('all');
+      setTab('enrollments');
+    } else if (statKey.includes('activit') || statKey.includes('verification')) {
+      setTab('activity');
+    }
+  };
 
   const handleApprove = async () => {
     setActionLoading(true);
@@ -203,6 +242,35 @@ export default function AdminUserDetails() {
       navigate('/admin/users');
     } catch (err) {
       toast.error(err.response?.data?.error || 'Failed to reject.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleSuspend = async () => {
+    if (!suspendReason.trim()) return;
+    setActionLoading(true);
+    try {
+      await api.post(`/admin/users/${id}/suspend`, { reason: suspendReason });
+      toast.success('User suspended.');
+      setUser((u) => ({ ...u, suspended_at: new Date().toISOString(), suspension_reason: suspendReason }));
+      setShowSuspend(false);
+      setSuspendReason('');
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to suspend.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleUnsuspend = async () => {
+    setActionLoading(true);
+    try {
+      await api.post(`/admin/users/${id}/unsuspend`);
+      toast.success('User unsuspended.');
+      setUser((u) => ({ ...u, suspended_at: null, suspension_reason: null }));
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to unsuspend.');
     } finally {
       setActionLoading(false);
     }
@@ -252,6 +320,40 @@ export default function AdminUserDetails() {
       })
       .finally(() => {
         setRestoreLoading(false);
+      });
+  };
+
+  const handleRevokeClick = (cert) => {
+    setRevokeTarget(cert);
+    setCertRevokeReason('');
+  };
+
+  const handleRevokeCert = () => {
+    if (!revokeTarget || !certRevokeReason.trim()) return;
+    setRevokeLoading(true);
+
+    api.post(`/admin/certificates/${revokeTarget.id}/revoke`, { reason: certRevokeReason })
+      .then(({ data }) => {
+        toast.success('Certificate revoked successfully');
+        setCertDetail(prev => ({
+          ...prev,
+          revoked_at: new Date().toISOString(),
+          revocation_reason: certRevokeReason,
+          revoked_by_name: 'Admin', // optimistic update
+          revocation_history: data.certificate?.revocation_history ?? prev.revocation_history,
+        }));
+        setCertificates(prev => prev.map(c =>
+          c.id === revokeTarget.id
+            ? { ...c, revoked_at: new Date().toISOString(), revocation_reason: certRevokeReason }
+            : c
+        ));
+        setRevokeTarget(null);
+      })
+      .catch(err => {
+        toast.error(err.response?.data?.error || 'Failed to revoke certificate.');
+      })
+      .finally(() => {
+        setRevokeLoading(false);
       });
   };
 
@@ -319,9 +421,34 @@ export default function AdminUserDetails() {
                   </Button>
                 </>
               )}
+              {user.is_approved && !user.suspended_at && user.role !== 'admin' && (
+                <Button variant="danger" onClick={() => setShowSuspend(true)}>
+                  <XCircle className="mr-2 h-4 w-4" /> Suspend Account
+                </Button>
+              )}
+              {user.suspended_at && (
+                <Button variant="success" onClick={handleUnsuspend} loading={actionLoading}>
+                  <CheckCircle className="mr-2 h-4 w-4" /> Unsuspend Account
+                </Button>
+              )}
             </div>
           </div>
         </Card>
+
+        {/* Warning Banner */}
+        {user.suspended_at && (
+          <div className="rounded-xl border border-red-200 bg-red-50 p-4 dark:border-red-900/40 dark:bg-red-900/20">
+            <div className="flex items-start gap-3">
+              <XCircle className="mt-0.5 h-5 w-5 text-red-600 dark:text-red-400" />
+              <div>
+                <h3 className="text-sm font-medium text-red-800 dark:text-red-300">Account Suspended</h3>
+                <p className="mt-1 text-sm text-red-700 dark:text-red-400">
+                  Reason: {user.suspension_reason}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Tabs */}
         <div className="flex gap-1 p-1 bg-gray-100 dark:bg-gray-800 rounded-xl">
@@ -342,7 +469,7 @@ export default function AdminUserDetails() {
         </div>
 
         {/* Tab content */}
-        {tab === 'overview' && <OverviewTab user={user} />}
+        {tab === 'overview' && <OverviewTab user={user} onStatClick={handleStatClick} />}
         {tab === 'certificates' && (
           <CertificatesTab
             certificates={certificates}
@@ -353,6 +480,8 @@ export default function AdminUserDetails() {
             onPageChange={fetchCertificates}
             onViewDetails={openCertDetail}
             role={user.role}
+            filter={certsFilter}
+            onFilterChange={setCertsFilter}
           />
         )}
         {tab === 'enrollments' && (
@@ -364,6 +493,8 @@ export default function AdminUserDetails() {
             lastPage={enrollLastPage}
             onPageChange={fetchEnrollments}
             role={user.role}
+            filter={enrollsFilter}
+            onFilterChange={setEnrollsFilter}
           />
         )}
         {tab === 'activity' && (
@@ -387,11 +518,29 @@ export default function AdminUserDetails() {
             onChange={(e) => setRejectReason(e.target.value)}
             placeholder="Reason for rejection..."
             rows={3}
-            className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm text-gray-900 placeholder-gray-400 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 dark:border-gray-700 dark:bg-gray-900 dark:text-white resize-none"
+            className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white resize-none"
           />
           <div className="flex justify-end gap-3">
             <Button variant="secondary" onClick={() => { setShowReject(false); setRejectReason(''); }}>Cancel</Button>
             <Button variant="danger" onClick={handleReject} loading={actionLoading} disabled={!rejectReason.trim()}>Reject User</Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Suspend Modal */}
+      <Modal open={showSuspend} onClose={() => { setShowSuspend(false); setSuspendReason(''); }} title="Suspend User" size="sm">
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600 dark:text-gray-400">This will suspend the user, preventing them from logging in.</p>
+          <textarea
+            value={suspendReason}
+            onChange={(e) => setSuspendReason(e.target.value)}
+            placeholder="Reason for suspension..."
+            rows={3}
+            className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white resize-none"
+          />
+          <div className="flex justify-end gap-3">
+            <Button variant="secondary" onClick={() => { setShowSuspend(false); setSuspendReason(''); }}>Cancel</Button>
+            <Button variant="danger" onClick={handleSuspend} loading={actionLoading} disabled={!suspendReason.trim()}>Suspend User</Button>
           </div>
         </div>
       </Modal>
@@ -404,8 +553,26 @@ export default function AdminUserDetails() {
         loading={restoreLoading}
       />
 
+      {/* Revoke Certificate Modal */}
+      <Modal open={!!revokeTarget} onClose={() => { setRevokeTarget(null); setCertRevokeReason(''); }} title="Revoke Certificate" size="sm">
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600 dark:text-gray-400">Please provide a reason for revoking this certificate.</p>
+          <textarea
+            value={certRevokeReason}
+            onChange={(e) => setCertRevokeReason(e.target.value)}
+            placeholder="Reason for revocation..."
+            rows={3}
+            className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white resize-none"
+          />
+          <div className="flex justify-end gap-3">
+            <Button variant="secondary" onClick={() => { setRevokeTarget(null); setCertRevokeReason(''); }}>Cancel</Button>
+            <Button variant="danger" onClick={handleRevokeCert} loading={revokeLoading} disabled={!certRevokeReason.trim()}>Revoke Certificate</Button>
+          </div>
+        </div>
+      </Modal>
+
       {/* Certificate Details Modal */}
-      <Modal open={!!certDetail} onClose={() => setCertDetail(null)} title="Certificate Details" size="lg">
+      <Modal open={!!certDetail} onClose={() => setCertDetail(null)} title="Certificate Details" size="xl">
         {certDetailLoading ? (
           <div className="flex justify-center py-10"><LoadingSpinner /></div>
         ) : certDetail ? (
@@ -413,6 +580,7 @@ export default function AdminUserDetails() {
             cert={certDetail}
             onViewStudent={(uid) => { setCertDetail(null); navigate(`/admin/users/${uid}`); }}
             onRestoreClick={handleRestoreClick}
+            onRevokeClick={handleRevokeClick}
           />
         ) : null}
       </Modal>
@@ -424,48 +592,84 @@ export default function AdminUserDetails() {
    TAB COMPONENTS
    ═══════════════════════════════════════════════════════════════════════ */
 
-function OverviewTab({ user }) {
+function OverviewTab({ user, onStatClick }) {
   return (
-    <div className="grid gap-6 lg:grid-cols-2">
-      {/* Profile info */}
-      <Card>
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-          {user.role === 'student' ? 'Personal Information' : user.role === 'university' ? 'Institution Information' : user.role === 'verifier' ? 'Company Information' : 'Account Information'}
-        </h2>
-        {user.profile ? (
-          <div className="divide-y divide-gray-100 dark:divide-gray-800">
-            {Object.entries(user.profile).map(([key, value]) => {
-              if (key === 'nid_status') {
-                return (
-                  <div key={key} className="flex items-start gap-3 py-2.5 border-b border-gray-100 dark:border-gray-800 last:border-0 flex-col sm:flex-row">
-                    <Hash className="mt-0.5 h-4 w-4 flex-shrink-0 text-gray-400" />
-                    <span className="w-40 flex-shrink-0 text-sm text-gray-500 dark:text-gray-400">National ID</span>
-                    <div>
-                      <span className="text-sm font-medium text-gray-900 dark:text-white break-all">{value}</span>
-                      {value === 'NID verified (hash only)' && (
-                        <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">Note: Full NID cannot be recovered as it is stored securely as a one-way hash.</p>
-                      )}
+    <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
+      {/* Left Column */}
+      <div className="space-y-6 flex flex-col h-full">
+        {/* Profile info */}
+        <Card className="flex-1">
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+            {user.role === 'student' ? 'Personal Information' : user.role === 'university' ? 'Institution Information' : user.role === 'verifier' ? 'Company Information' : 'Account Information'}
+          </h2>
+          {user.profile ? (
+            <div className="divide-y divide-gray-100 dark:divide-gray-800">
+              {Object.entries(user.profile).map(([key, value]) => {
+                if (key === 'nid_display') {
+                  const isLegacy = typeof value === 'string' && (
+                    value.startsWith('NID on file') || value === 'Not Set' || value === '[Encrypted]'
+                  );
+                  return (
+                    <div key={key} className="py-1.5 border-b border-gray-100 dark:border-gray-800 last:border-0">
+                      <div className="flex items-start gap-3">
+                        <Hash className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-500" />
+                        <div className="flex-1">
+                          <span className="text-sm text-gray-500 dark:text-gray-400 block mb-1.5">
+                            NID / Birth Certificate (Full)
+                          </span>
+                          {isLegacy ? (
+                            <span className="text-sm italic text-gray-400 dark:text-gray-500">{value}</span>
+                          ) : (
+                            <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800/40 dark:bg-amber-900/20 px-3 py-2">
+                              <p className="text-[10px] font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-400 mb-1">
+                                Sensitive — Admin Only
+                              </p>
+                              <span className="font-mono text-sm font-semibold text-amber-900 dark:text-amber-200 tracking-wider">
+                                {value}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                );
-              }
-              const label = key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-              return <InfoRow key={key} icon={User} label={label} value={value} />;
-            })}
-          </div>
-        ) : (
-          <p className="text-sm text-gray-500 dark:text-gray-400">No profile data available.</p>
-        )}
-      </Card>
+                  );
+                }
+                const label = key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+                return <InfoRow key={key} icon={User} label={label} value={value} />;
+              })}
+            </div>
+          ) : (
+            <p className="text-sm text-gray-500 dark:text-gray-400">No profile data available.</p>
+          )}
+        </Card>
 
-      {/* Account Info */}
-      <div className="space-y-6">
-        <Card>
+        {/* Enrollment summary for students */}
+        {user.enrollments_summary && user.enrollments_summary.length > 0 && (
+          <Card>
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Current Enrollment</h2>
+            {user.enrollments_summary.filter((e) => e.status === 'active').map((e) => (
+              <div key={e.id} className="rounded-xl border border-gray-100 dark:border-gray-800 p-4 space-y-2 mt-2">
+                <div className="flex items-center justify-between">
+                  <p className="font-medium text-gray-900 dark:text-white">{e.institution}</p>
+                  <Badge variant="success">Active</Badge>
+                </div>
+                <p className="text-sm text-gray-500 dark:text-gray-400">{e.program} · Batch {e.batch} · Student ID: {e.roll_number || '—'}</p>
+                <p className="text-xs text-gray-400">Enrolled: {e.enrollment_date} · Expected: {e.expected_grad || 'TBD'}</p>
+              </div>
+            ))}
+          </Card>
+        )}
+      </div>
+
+      {/* Right Column */}
+      <div className="space-y-6 flex flex-col h-full">
+        {/* Account Info */}
+        <Card className="flex-1">
           <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Account Information</h2>
           <div className="divide-y divide-gray-100 dark:divide-gray-800">
-            <InfoRow icon={Calendar} label="Registered" value={user.created_at ? new Date(user.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : '—'} />
-            <InfoRow icon={Mail} label="Email Verified" value={user.email_verified_at ? new Date(user.email_verified_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : 'Not verified'} />
-            <InfoRow icon={CheckCircle} label="Approved" value={user.approved_at ? new Date(user.approved_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : 'Pending'} />
+            <InfoRow icon={Calendar} label="Registered" value={user.created_at ? formatDate(user.created_at) : '—'} />
+            <InfoRow icon={Mail} label="Email Verified" value={user.email_verified_at ? formatDate(user.email_verified_at) : 'Not verified'} />
+            <InfoRow icon={CheckCircle} label="Approved" value={user.approved_at ? formatDate(user.approved_at) : 'Pending'} />
             {user.approved_by_name && <InfoRow icon={UserCog} label="Approved By" value={user.approved_by_name} />}
           </div>
         </Card>
@@ -477,26 +681,9 @@ function OverviewTab({ user }) {
             <div className="grid grid-cols-2 gap-3">
               {Object.entries(user.stats).map(([key, value]) => {
                 const label = key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-                return <StatBox key={key} label={label} value={typeof value === 'number' && key.includes('rate') ? `${value}%` : value} />;
+                return <StatBox key={key} label={label} value={typeof value === 'number' && key.includes('rate') ? `${value}%` : value} onClick={() => onStatClick(key)} />;
               })}
             </div>
-          </Card>
-        )}
-
-        {/* Enrollment summary for students */}
-        {user.enrollments_summary && user.enrollments_summary.length > 0 && (
-          <Card>
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Current Enrollment</h2>
-            {user.enrollments_summary.filter((e) => e.status === 'active').map((e) => (
-              <div key={e.id} className="rounded-xl border border-gray-100 dark:border-gray-800 p-4 space-y-2">
-                <div className="flex items-center justify-between">
-                  <p className="font-medium text-gray-900 dark:text-white">{e.institution}</p>
-                  <Badge variant="success">Active</Badge>
-                </div>
-                <p className="text-sm text-gray-500 dark:text-gray-400">{e.program} · Batch {e.batch}</p>
-                <p className="text-xs text-gray-400">Enrolled: {e.enrollment_date} · Expected: {e.expected_grad || 'TBD'}</p>
-              </div>
-            ))}
           </Card>
         )}
       </div>
@@ -504,19 +691,36 @@ function OverviewTab({ user }) {
   );
 }
 
-function CertificatesTab({ certificates, loading, total, currentPage, lastPage, onPageChange, onViewDetails, role }) {
+function CertificatesTab({ certificates, loading, total, currentPage, lastPage, onPageChange, onViewDetails, role, filter, onFilterChange }) {
+  const filteredCertificates = filter === 'revoked' 
+     ? certificates.filter(c => c.revoked_at) 
+     : filter === 'active' 
+     ? certificates.filter(c => !c.revoked_at) 
+     : certificates;
+
   if (loading) return <div className="flex justify-center py-16"><LoadingSpinner /></div>;
 
   return (
     <Card>
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-4">
         <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
           {role === 'university' ? 'Certificates Issued' : 'Certificates'}
         </h2>
-        <p className="text-sm text-gray-500 dark:text-gray-400">{total} total</p>
+        <div className="flex items-center gap-3">
+          <select 
+            value={filter} 
+            onChange={(e) => onFilterChange(e.target.value)}
+            className="rounded-lg border border-gray-300 bg-white px-2 py-1 text-sm dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+          >
+            <option value="all">All Statuses</option>
+            <option value="active">Active</option>
+            <option value="revoked">Revoked</option>
+          </select>
+          <p className="text-sm text-gray-500 dark:text-gray-400">{total} total</p>
+        </div>
       </div>
 
-      {certificates.length === 0 ? (
+      {filteredCertificates.length === 0 ? (
         <div className="flex flex-col items-center py-12 text-center">
           <FileText className="h-10 w-10 text-gray-300 dark:text-gray-600 mb-3" />
           <p className="text-sm text-gray-500 dark:text-gray-400">No certificates found.</p>
@@ -535,18 +739,18 @@ function CertificatesTab({ certificates, loading, total, currentPage, lastPage, 
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                {certificates.map((c) => (
-                  <tr key={c.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition">
-                    <td className="py-3 px-3 font-mono text-xs text-gray-900 dark:text-white">{c.serial}</td>
-                    <td className="py-3 px-3 text-gray-700 dark:text-gray-300 text-xs">{c.certificate_name}</td>
-                    <td className="py-3 px-3 text-gray-500 dark:text-gray-400 text-xs">{role === 'university' ? c.student_name : c.institution_name}</td>
-                    <td className="py-3 px-3"><Badge variant="default">{c.certificate_level}</Badge></td>
-                    <td className="py-3 px-3 text-gray-700 dark:text-gray-300 text-xs">{c.cgpa || '—'}</td>
-                    <td className="py-3 px-3 text-gray-500 dark:text-gray-400 text-xs whitespace-nowrap">{c.issue_date}</td>
-                    <td className="py-3 px-3">
+                {filteredCertificates.map((c) => (
+                  <tr key={c.id} className="h-12 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition">
+                    <td className="px-3 py-0 font-mono text-xs text-gray-900 dark:text-white">{c.serial}</td>
+                    <td className="px-3 py-0 text-gray-700 dark:text-gray-300 text-xs">{c.certificate_name}</td>
+                    <td className="px-3 py-0 text-gray-500 dark:text-gray-400 text-xs">{role === 'university' ? c.student_name : c.institution_name}</td>
+                    <td className="px-3 py-0"><Badge variant="default">{c.certificate_level}</Badge></td>
+                    <td className="px-3 py-0 text-gray-700 dark:text-gray-300 text-xs">{c.cgpa || '—'}</td>
+                    <td className="px-3 py-0 text-gray-500 dark:text-gray-400 text-xs whitespace-nowrap">{c.issue_date}</td>
+                    <td className="px-3 py-0">
                       {c.revoked_at ? <Badge variant="error">Revoked</Badge> : <Badge variant="success">Active</Badge>}
                     </td>
-                    <td className="py-3 px-3 text-right">
+                    <td className="px-3 py-0 text-right">
                       <button
                         onClick={() => onViewDetails(c.id)}
                         className="inline-flex items-center gap-1 rounded-lg border border-gray-200 dark:border-gray-700 px-2.5 py-1 text-xs font-medium text-gray-700 dark:text-gray-300 hover:border-primary-300 hover:text-primary-600 transition"
@@ -566,19 +770,35 @@ function CertificatesTab({ certificates, loading, total, currentPage, lastPage, 
   );
 }
 
-function EnrollmentsTab({ enrollments, loading, total, currentPage, lastPage, onPageChange, role }) {
+function EnrollmentsTab({ enrollments, loading, total, currentPage, lastPage, onPageChange, role, filter, onFilterChange }) {
   if (loading) return <div className="flex justify-center py-16"><LoadingSpinner /></div>;
 
   const STATUS_COLORS = { active: 'success', graduated: 'primary', withdrawn: 'error' };
 
+  const filteredEnrollments = filter === 'all' 
+    ? enrollments 
+    : enrollments.filter(e => e.status === filter);
+
   return (
     <Card>
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-4">
         <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Enrollments</h2>
-        <p className="text-sm text-gray-500 dark:text-gray-400">{total} total</p>
+        <div className="flex items-center gap-3">
+          <select 
+            value={filter} 
+            onChange={(e) => onFilterChange(e.target.value)}
+            className="rounded-lg border border-gray-300 bg-white px-2 py-1 text-sm dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+          >
+            <option value="all">All Statuses</option>
+            <option value="active">Active</option>
+            <option value="graduated">Graduated</option>
+            <option value="withdrawn">Withdrawn</option>
+          </select>
+          <p className="text-sm text-gray-500 dark:text-gray-400">{total} total</p>
+        </div>
       </div>
 
-      {enrollments.length === 0 ? (
+      {filteredEnrollments.length === 0 ? (
         <div className="flex flex-col items-center py-12 text-center">
           <BookOpen className="h-10 w-10 text-gray-300 dark:text-gray-600 mb-3" />
           <p className="text-sm text-gray-500 dark:text-gray-400">No enrollments found.</p>
@@ -589,7 +809,7 @@ function EnrollmentsTab({ enrollments, loading, total, currentPage, lastPage, on
             <table className="w-full min-w-[700px] text-sm">
               <thead>
                 <tr className="border-b border-gray-200 dark:border-gray-700">
-                  {[role === 'university' ? 'Student' : 'Institution', 'Program', 'Batch', 'Enrollment #', 'Status', 'Enrolled', 'Expected Grad'].map((h) => (
+                  {[role === 'university' ? 'Student' : 'Institution', 'Student ID', 'Program', 'Batch', 'Enrollment #', 'Status', 'Enrolled', 'Expected Grad'].map((h) => (
                     <th key={h} className="py-3 px-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
                       {h}
                     </th>
@@ -597,15 +817,16 @@ function EnrollmentsTab({ enrollments, loading, total, currentPage, lastPage, on
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                {enrollments.map((e) => (
-                  <tr key={e.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition">
-                    <td className="py-3 px-3 text-sm text-gray-900 dark:text-white">{role === 'university' ? e.student_name : e.institution_name}</td>
-                    <td className="py-3 px-3 text-xs text-gray-700 dark:text-gray-300">{e.program}</td>
-                    <td className="py-3 px-3 text-xs text-gray-500 dark:text-gray-400">{e.batch || '—'}</td>
-                    <td className="py-3 px-3 text-xs font-mono text-gray-500 dark:text-gray-400">{e.enrollment_number || '—'}</td>
-                    <td className="py-3 px-3"><Badge variant={STATUS_COLORS[e.status] || 'default'}>{e.status}</Badge></td>
-                    <td className="py-3 px-3 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">{e.enrollment_date || '—'}</td>
-                    <td className="py-3 px-3 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">{e.expected_grad || '—'}</td>
+                {filteredEnrollments.map((e) => (
+                  <tr key={e.id} className="h-12 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition">
+                    <td className="px-3 py-0 text-sm text-gray-900 dark:text-white">{role === 'university' ? e.student_name : e.institution_name}</td>
+                    <td className="px-3 py-0 text-xs text-gray-700 dark:text-gray-300">{e.roll_number || '—'}</td>
+                    <td className="px-3 py-0 text-xs text-gray-700 dark:text-gray-300">{e.program}</td>
+                    <td className="px-3 py-0 text-xs text-gray-500 dark:text-gray-400">{e.batch || '—'}</td>
+                    <td className="px-3 py-0 text-xs font-mono text-gray-500 dark:text-gray-400">{e.enrollment_number || '—'}</td>
+                    <td className="px-3 py-0"><Badge variant={STATUS_COLORS[e.status] || 'default'}>{e.status}</Badge></td>
+                    <td className="px-3 py-0 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">{e.enrollment_date || '—'}</td>
+                    <td className="px-3 py-0 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">{e.expected_grad || '—'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -687,108 +908,158 @@ function PaginationBar({ currentPage, lastPage, onPageChange }) {
    CERTIFICATE DETAILS MODAL CONTENT
    ═══════════════════════════════════════════════════════════════════════ */
 
-function CertificateDetailContent({ cert, onViewStudent, onRestoreClick }) {
+function CertificateDetailContent({ cert, onViewStudent, onRestoreClick, onRevokeClick }) {
+  const [copiedSerial, setCopiedSerial] = useState(null);
+  const [copiedLink, setCopiedLink] = useState(false);
+
+  const getVerificationUrl = (certificate) => certificate.share_link || `${window.location.origin}/verify?serial=${encodeURIComponent(certificate.serial)}`;
+
+  const handleCopySerial = async (serial) => {
+    try {
+      await navigator.clipboard.writeText(serial);
+      setCopiedSerial(serial);
+      toast.success('Copied!');
+      setTimeout(() => setCopiedSerial(null), 2000);
+    } catch (err) {
+      toast.error('Failed to copy serial number');
+    }
+  };
+
+  const handleCopyVerificationLink = async (certificate) => {
+    try {
+      await navigator.clipboard.writeText(getVerificationUrl(certificate));
+      setCopiedLink(true);
+      toast.success('Share link copied to clipboard');
+      setTimeout(() => setCopiedLink(false), 2000);
+    } catch (err) {
+      toast.error('Failed to copy share link');
+    }
+  };
+
   return (
-    <div className="space-y-5">
-      {/* Status banner */}
-      <div className={`rounded-xl px-4 py-3 flex items-center justify-between gap-3 ${
-        cert.revoked_at
-          ? 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800'
-          : 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800'
-      }`}>
-        <div className="flex items-center gap-3">
-          {cert.revoked_at ? (
-            <XCircle className="h-5 w-5 text-red-600 flex-shrink-0" />
-          ) : (
-            <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0" />
-          )}
-          <div>
-            <p className={`text-sm font-semibold ${cert.revoked_at ? 'text-red-800 dark:text-red-300' : 'text-green-800 dark:text-green-300'}`}>
-              {cert.revoked_at ? 'Certificate Revoked' : 'Certificate Active'}
-            </p>
-            {cert.revoked_at && cert.revocation_reason && (
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Reason: {cert.revocation_reason}</p>
+    <div className="space-y-6">
+      {/* Header and Serial */}
+      <div className="space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+            {cert.certificate_name}
+          </h2>
+          {/* Restore/Revoke buttons */}
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {cert.revoked_at && onRestoreClick && (
+              <button
+                onClick={() => onRestoreClick(cert)}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-900/20 px-3 py-1.5 text-xs font-medium text-green-700 dark:text-green-300 hover:bg-green-100 dark:hover:bg-green-900/40 transition"
+              >
+                <RotateCcw className="h-3.5 w-3.5" /> Restore
+              </button>
+            )}
+            {!cert.revoked_at && onRevokeClick && (
+              <button
+                onClick={() => onRevokeClick(cert)}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/20 px-3 py-1.5 text-xs font-medium text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/40 transition"
+              >
+                <XCircle className="h-3.5 w-3.5" /> Revoke
+              </button>
             )}
           </div>
         </div>
 
-        {/* Restore button — only visible when revoked, admin-only route enforces access */}
-        {cert.revoked_at && onRestoreClick && (
-          <button
-            onClick={() => onRestoreClick(cert)}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-900/20 px-3 py-1.5 text-xs font-medium text-green-700 dark:text-green-300 hover:bg-green-100 dark:hover:bg-green-900/40 transition flex-shrink-0"
-          >
-            <RotateCcw className="h-3.5 w-3.5" /> Restore Certificate
-          </button>
-        )}
-      </div>
+        <div className="rounded-2xl border border-gray-200 bg-gray-50 p-5 dark:border-gray-800 dark:bg-gray-800/40">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant={cert.revoked_at ? 'danger' : 'success'}>
+              {cert.revoked_at ? 'Revoked' : 'Active'}
+            </Badge>
+            <Badge variant="primary">{cert.certificate_level}</Badge>
+            {cert.is_publicly_shareable && <Badge variant="warning">Public Share</Badge>}
+          </div>
 
-      <div className="grid gap-6 lg:grid-cols-[1.4fr_0.6fr]">
-        {/* Left: Certificate info */}
-        <div>
-          <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">Certificate Information</h3>
-          <div className="rounded-xl border border-gray-100 dark:border-gray-800 divide-y divide-gray-100 dark:divide-gray-800 px-4">
-            <InfoRow icon={Hash} label="Serial Number" value={cert.serial} />
-            <InfoRow icon={Award} label="Certificate" value={cert.certificate_name} />
-            <InfoRow icon={Award} label="Level" value={cert.certificate_level} />
-            <InfoRow icon={Award} label="Department" value={cert.department} />
-            <InfoRow icon={Award} label="Major" value={cert.major} />
-            <InfoRow icon={Award} label="Session" value={cert.session} />
-            <InfoRow icon={Award} label="CGPA" value={cert.cgpa} />
-            <InfoRow icon={Award} label="Degree Class" value={cert.degree_class} />
-            <InfoRow icon={Calendar} label="Issue Date" value={cert.issue_date} />
-            <InfoRow icon={Calendar} label="Convocation" value={cert.convocation_date} />
-            <InfoRow icon={User} label="Authority" value={cert.authority_name ? `${cert.authority_name} (${cert.authority_title})` : null} />
+          {cert.revoked_at && (
+            <div className="mt-3 rounded-lg bg-red-50 dark:bg-red-900/20 p-3 border border-red-100 dark:border-red-800/30">
+              <p className="text-xs text-red-800 dark:text-red-300 font-medium mb-1">Revocation Details</p>
+              <p className="text-xs text-red-600 dark:text-red-400">
+                <span className="font-medium">By:</span> {cert.revoked_by_name} <span className="italic">({cert.revoked_by_role})</span>
+              </p>
+              <p className="text-xs text-red-600 dark:text-red-400 mt-0.5">
+                <span className="font-medium">Reason:</span> {cert.revocation_reason}
+              </p>
+            </div>
+          )}
+
+          <p className="mt-4 text-sm uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">Serial Number</p>
+          <div className="flex items-center gap-3 mt-1">
+            <p className="font-mono text-lg font-semibold text-gray-900 dark:text-white">{cert.serial}</p>
+            <button
+              onClick={() => handleCopySerial(cert.serial)}
+              className="p-1.5 rounded-lg text-gray-500 hover:text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition flex items-center gap-1"
+              title="Copy serial number"
+            >
+              {copiedSerial === cert.serial ? (
+                <>
+                  <Check className="h-5 w-5 text-green-600 dark:text-green-400 animate-fade-in" />
+                  <span className="text-xs text-green-600 dark:text-green-400 font-medium">Copied!</span>
+                </>
+              ) : (
+                <Copy className="h-5 w-5" />
+              )}
+            </button>
           </div>
         </div>
 
-        {/* Right: Student + Institution + Verification */}
-        <div className="space-y-5">
-          {cert.student && (
-            <div>
-              <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">Student</h3>
-              <div className="rounded-xl border border-gray-100 dark:border-gray-800 divide-y divide-gray-100 dark:divide-gray-800 px-4">
-                <InfoRow icon={User} label="Name" value={cert.student.full_name} />
-                <InfoRow icon={Hash} label="Student ID" value={cert.student.student_id} />
-                <InfoRow icon={Calendar} label="DOB" value={cert.student.dob_masked} />
-              </div>
-              {cert.student.user_id && (
-                <button
-                  onClick={() => onViewStudent(cert.student.user_id)}
-                  className="mt-2 flex items-center gap-1.5 text-xs font-medium text-primary-600 hover:text-primary-700"
-                >
-                  <ExternalLink className="h-3 w-3" /> View Student Profile
-                </button>
-              )}
-            </div>
-          )}
+        {/* Certificate Details Grid */}
+        <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
+          <DetailTile label="Institution" value={cert.institution?.name} action={cert.institution?.user_id ? { label: "View Institution", onClick: () => onViewStudent(cert.institution.user_id) } : null} />
+          <DetailTile label="Student" value={cert.student?.full_name} action={cert.student?.user_id ? { label: "View Student", onClick: () => onViewStudent(cert.student.user_id) } : null} />
+          <DetailTile label="Issue Date" value={cert.issue_date} />
+          <DetailTile label="Department" value={cert.department || 'N/A'} />
+          <DetailTile label="Major" value={cert.major || 'N/A'} />
+          <DetailTile label="Session" value={cert.session || 'N/A'} />
+          <DetailTile label="CGPA" value={cert.cgpa || 'N/A'} />
+          <DetailTile label="Degree Class" value={cert.degree_class || 'N/A'} />
+          <DetailTile label="Convocation" value={cert.convocation_date || 'N/A'} />
+        </div>
+      </div>
 
-          {cert.institution && (
-            <div>
-              <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">Institution</h3>
-              <div className="rounded-xl border border-gray-100 dark:border-gray-800 divide-y divide-gray-100 dark:divide-gray-800 px-4">
-                <InfoRow icon={Building2} label="Name" value={cert.institution.name} />
-              </div>
-              {cert.institution.user_id && (
-                <button
-                  onClick={() => onViewStudent(cert.institution.user_id)}
-                  className="mt-2 flex items-center gap-1.5 text-xs font-medium text-primary-600 hover:text-primary-700"
-                >
-                  <ExternalLink className="h-3 w-3" /> View Institution Profile
-                </button>
-              )}
-            </div>
-          )}
-
+      {/* Verification Section */}
+      <div className="flex flex-col sm:flex-row gap-6 items-center sm:items-stretch rounded-2xl border border-gray-200 p-5 dark:border-gray-800 bg-white dark:bg-gray-900/40">
+        <div className="flex-1 space-y-4 w-full">
           <div>
-            <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">Verification</h3>
-            <div className="rounded-xl border border-gray-100 dark:border-gray-800 divide-y divide-gray-100 dark:divide-gray-800 px-4">
-              <InfoRow icon={ShieldCheck} label="Times Verified" value={cert.verification_count} />
-              <InfoRow icon={Clock} label="Last Verified" value={cert.last_verified_at ? new Date(cert.last_verified_at).toLocaleString() : 'Never'} />
-              <InfoRow icon={User} label="Issued By" value={cert.issued_by_name} />
-              <InfoRow icon={Eye} label="Publicly Shareable" value={cert.is_publicly_shareable ? 'Yes' : 'No'} />
+            <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">Verification Link</h3>
+            <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
+              Use this link or the QR code to verify this certificate's authenticity.
+            </p>
+            <div className="mt-3 rounded-lg bg-gray-50 dark:bg-gray-800/80 p-3 border border-gray-100 dark:border-gray-700 break-all text-sm font-mono text-gray-800 dark:text-gray-200">
+              {getVerificationUrl(cert)}
             </div>
           </div>
+          <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
+            <Button onClick={() => handleCopyVerificationLink(cert)}>
+              {copiedLink ? (
+                <><Check className="mr-2 h-4 w-4" />Copied!</>
+              ) : (
+                <><Copy className="mr-2 h-4 w-4" />Copy Share Link</>
+              )}
+            </Button>
+            <div className="flex items-center text-sm text-gray-500 dark:text-gray-400">
+              <ShieldCheck className="mr-1.5 h-4 w-4" />
+              <span>
+                Verified <span className="font-semibold text-gray-900 dark:text-gray-200">{cert.verification_count}</span> times 
+                {cert.last_verified_at && ` (Last: ${new Date(cert.last_verified_at).toLocaleDateString()})`}
+              </span>
+            </div>
+          </div>
+        </div>
+        
+        <div className="shrink-0 flex flex-col items-center justify-center rounded-xl border border-gray-200 bg-white p-3 shadow-sm dark:border-gray-700">
+          <QRCodeSVG
+            value={getVerificationUrl(cert)}
+            size={120}
+            level="H"
+            includeMargin={true}
+            fgColor="#0f172a"
+            bgColor="#ffffff"
+          />
+          <p className="mt-2 text-[10px] font-semibold uppercase tracking-wider text-gray-500">Scan to verify</p>
         </div>
       </div>
 
@@ -797,6 +1068,25 @@ function CertificateDetailContent({ cert, onViewStudent, onRestoreClick }) {
         history={cert.revocation_history}
         issueDate={cert.issue_date}
       />
+    </div>
+  );
+}
+
+function DetailTile({ label, value, action }) {
+  return (
+    <div className="rounded-2xl border border-gray-200 bg-white px-4 py-3 dark:border-gray-800 dark:bg-gray-900/60 flex flex-col justify-between">
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-500 dark:text-gray-400">{label}</p>
+        <p className="mt-1 text-sm font-medium text-gray-900 dark:text-white truncate" title={value || 'N/A'}>{value || 'N/A'}</p>
+      </div>
+      {action && (
+        <button
+          onClick={action.onClick}
+          className="mt-2 flex items-center gap-1.5 text-[11px] font-medium text-primary-600 hover:text-primary-700 transition"
+        >
+          <ExternalLink className="h-3 w-3" /> {action.label}
+        </button>
+      )}
     </div>
   );
 }

@@ -9,35 +9,26 @@ import Modal from '../../components/shared/Modal';
 import LoadingSpinner from '../../components/shared/LoadingSpinner';
 import AccessRequestCard from '../../components/access/AccessRequestCard';
 import GrantedAccessCard from '../../components/access/GrantedAccessCard';
-import MyAccessRequestCard from '../../components/access/MyAccessRequestCard';
 import AccessDurationSelect from '../../components/access/AccessDurationSelect';
 import PurposeInput from '../../components/access/PurposeInput';
 import api from '../../services/api';
 import { useNotifications } from '../../contexts/NotificationContext';
-
-const tabs = [
-  { id: 'pending', label: 'Pending Requests' },
-  { id: 'granted', label: 'Granted Access' },
-  { id: 'history', label: 'Request History' },
-];
+import EmptyState from '../../components/shared/EmptyState';
+import { FileText, ShieldCheck } from 'lucide-react';
 
 export default function StudentAccessRequests() {
-  const [searchParams, setSearchParams] = useSearchParams();
-  const [activeTab, setActiveTab] = useState(() => {
-    const tab = searchParams.get('tab');
-    return tab && ['pending', 'granted', 'history'].includes(tab) ? tab : 'pending';
-  });
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [pendingRequests, setPendingRequests] = useState([]);
-  const [historyRequests, setHistoryRequests] = useState([]);
   const [grantedAccesses, setGrantedAccesses] = useState([]);
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [requestModalType, setRequestModalType] = useState('');
   const [selectedAccess, setSelectedAccess] = useState(null);
   const [approveDuration, setApproveDuration] = useState('30');
   const [rejectReason, setRejectReason] = useState('');
+  const [historyPage, setHistoryPage] = useState(1);
+  const itemsPerPage = 10;
   const { refreshCount } = useNotifications();
 
   const fetchData = async () => {
@@ -49,7 +40,6 @@ export default function StudentAccessRequests() {
       ]);
 
       setPendingRequests(requestsData.pending_requests || []);
-      setHistoryRequests(requestsData.history || []);
       setGrantedAccesses(accessData.accesses || []);
     } catch (requestError) {
       setError(requestError.response?.data?.message || 'Failed to load access requests.');
@@ -62,21 +52,23 @@ export default function StudentAccessRequests() {
     fetchData();
   }, []);
 
-  useEffect(() => {
-    const tab = searchParams.get('tab');
-    if (tab && ['pending', 'granted', 'history'].includes(tab)) {
-      setActiveTab(tab);
-    }
-  }, [searchParams]);
-
   const activeAccesses = useMemo(() => {
     return grantedAccesses.filter((access) => access.is_active && !access.revoked_at && new Date(access.expires_at) > new Date());
   }, [grantedAccesses]);
 
+  const historyAccesses = useMemo(() => {
+    return grantedAccesses.filter((access) => !access.is_active || access.revoked_at || new Date(access.expires_at) <= new Date());
+  }, [grantedAccesses]);
+
+  const totalHistoryPages = Math.ceil(historyAccesses.length / itemsPerPage);
+  
+  const paginatedHistory = useMemo(() => {
+    const startIndex = (historyPage - 1) * itemsPerPage;
+    return historyAccesses.slice(startIndex, startIndex + itemsPerPage);
+  }, [historyAccesses, historyPage]);
+
   const handleApprove = async () => {
-    if (!selectedRequest) {
-      return;
-    }
+    if (!selectedRequest) return;
 
     setSubmitting(true);
     try {
@@ -96,9 +88,7 @@ export default function StudentAccessRequests() {
   };
 
   const handleReject = async () => {
-    if (!selectedRequest) {
-      return;
-    }
+    if (!selectedRequest) return;
 
     setSubmitting(true);
     try {
@@ -119,9 +109,7 @@ export default function StudentAccessRequests() {
   };
 
   const handleRevoke = async () => {
-    if (!selectedAccess) {
-      return;
-    }
+    if (!selectedAccess) return;
 
     setSubmitting(true);
     try {
@@ -137,15 +125,6 @@ export default function StudentAccessRequests() {
     }
   };
 
-  const renderEmptyState = (title, description) => (
-    <Card>
-      <div className="py-10 text-center">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{title}</h3>
-        <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">{description}</p>
-      </div>
-    </Card>
-  );
-
   if (loading) {
     return (
       <DashboardLayout>
@@ -158,88 +137,114 @@ export default function StudentAccessRequests() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      <div className="space-y-[24px]">
+        {/* Page Header */}
+        <div className="flex items-center justify-between mb-6">
           <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.15em] text-primary-600">Access Requests</p>
-            <h1 className="mt-2 text-3xl font-bold text-gray-900 dark:text-white">Manage verifier access</h1>
+            <h1 className="text-xl font-semibold text-[var(--text-primary)]">Manage verifier access</h1>
+            <p className="text-sm text-[var(--text-secondary)] mt-1">Review requests and manage active access to your certificates.</p>
           </div>
-          <Badge variant="primary">{pendingRequests.length} pending</Badge>
         </div>
 
-        {error ? (
+        {error && (
           <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300">
             {error}
           </div>
-        ) : null}
+        )}
 
-        <div className="flex flex-wrap gap-2 border-b border-gray-200 pb-2 dark:border-gray-800">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => {
-                setActiveTab(tab.id);
-                setSearchParams({ tab: tab.id });
-              }}
-              className={`rounded-full px-4 py-2 text-sm font-medium transition ${
-                activeTab === tab.id
-                  ? 'bg-primary-600 text-white shadow-sm'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
+        {/* Section 1: Incoming Requests */}
+        <div>
+          <h2 className="text-lg font-semibold text-[var(--text-primary)] mb-[24px]">Incoming Requests</h2>
+          <div className="space-y-[24px]">
+            {pendingRequests.length > 0 ? (
+              pendingRequests.map((request) => (
+                <AccessRequestCard
+                  key={request.id}
+                  request={request}
+                  onApprove={(item) => {
+                    setSelectedRequest(item);
+                    setRequestModalType('approve');
+                    setApproveDuration('30');
+                  }}
+                  onReject={(item) => {
+                    setSelectedRequest(item);
+                    setRequestModalType('reject');
+                    setRejectReason('');
+                  }}
+                  loading={submitting}
+                />
+              ))
+            ) : (
+              <EmptyState title="No pending requests" message="Verifier access requests will appear here when they are waiting for your approval." icon={FileText} />
+            )}
+          </div>
         </div>
 
-        {activeTab === 'pending' ? (
-          <div className="space-y-4">
-            {pendingRequests.length > 0
-              ? pendingRequests.map((request) => (
-                  <AccessRequestCard
-                    key={request.id}
-                    request={request}
-                    onApprove={(item) => {
-                      setSelectedRequest(item);
-                      setRequestModalType('approve');
-                      setApproveDuration('30');
-                    }}
-                    onReject={(item) => {
-                      setSelectedRequest(item);
-                      setRequestModalType('reject');
-                      setRejectReason('');
-                    }}
-                    loading={submitting}
-                  />
-                ))
-              : renderEmptyState('No pending requests', 'Verifier access requests will appear here when they are waiting for your approval.')}
+        {/* Section 2: Granted Access */}
+        <div>
+          <h2 className="text-lg font-semibold text-[var(--text-primary)] mb-[24px]">Granted Access</h2>
+          <div className="space-y-[24px]">
+            {activeAccesses.length > 0 ? (
+              activeAccesses.map((access) => (
+                <GrantedAccessCard
+                  key={access.id}
+                  access={access}
+                  onRevoke={setSelectedAccess}
+                  loading={submitting}
+                />
+              ))
+            ) : (
+              <EmptyState title="No active access" message="Once you approve a verifier, their active access will be shown here." icon={ShieldCheck} />
+            )}
           </div>
-        ) : null}
+        </div>
 
-        {activeTab === 'granted' ? (
-          <div className="space-y-4">
-            {activeAccesses.length > 0
-              ? activeAccesses.map((access) => (
-                  <GrantedAccessCard
-                    key={access.id}
-                    access={access}
-                    onRevoke={setSelectedAccess}
-                    loading={submitting}
-                  />
-                ))
-              : renderEmptyState('No active access', 'Once you approve a verifier, their active access will be shown here.')}
-          </div>
-        ) : null}
+        {/* Section 3: Access History */}
+        {historyAccesses.length > 0 && (
+          <div>
+            <h2 className="text-lg font-semibold text-[var(--text-primary)] mb-[24px] pt-4 border-t border-[var(--border)]">Access History</h2>
+            <div className="space-y-[24px] opacity-75">
+              {paginatedHistory.map((access) => (
+                <GrantedAccessCard
+                  key={access.id}
+                  access={access}
+                  onRevoke={setSelectedAccess}
+                  loading={submitting}
+                />
+              ))}
+            </div>
 
-        {activeTab === 'history' ? (
-          <div className="space-y-4">
-            {historyRequests.length > 0
-              ? historyRequests.map((request) => (
-                  <MyAccessRequestCard key={request.id} request={request} />
-                ))
-              : renderEmptyState('No history yet', 'Approved and rejected requests will appear here for your review.')}
+            {/* Pagination Controls */}
+            {totalHistoryPages > 1 && (
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-6 pt-4 border-t border-[var(--border)] opacity-75">
+                <span className="text-sm text-[var(--text-secondary)]">
+                  Showing {(historyPage - 1) * itemsPerPage + 1} to {Math.min(historyPage * itemsPerPage, historyAccesses.length)} of {historyAccesses.length} entries
+                </span>
+                <div className="flex items-center gap-3">
+                  <Button 
+                    variant="secondary" 
+                    size="sm" 
+                    onClick={() => setHistoryPage(p => Math.max(1, p - 1))}
+                    disabled={historyPage === 1}
+                  >
+                    Previous
+                  </Button>
+                  <span className="text-sm font-medium text-[var(--text-primary)] min-w-[5rem] text-center">
+                    Page {historyPage} of {totalHistoryPages}
+                  </span>
+                  <Button 
+                    variant="secondary" 
+                    size="sm" 
+                    onClick={() => setHistoryPage(p => Math.min(totalHistoryPages, p + 1))}
+                    disabled={historyPage === totalHistoryPages}
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
-        ) : null}
+        )}
       </div>
 
       <Modal
@@ -252,8 +257,8 @@ export default function StudentAccessRequests() {
       >
         {selectedRequest ? (
           <div className="space-y-5">
-            <div className="rounded-xl bg-gray-50 p-4 text-sm text-gray-600 dark:bg-gray-900/60 dark:text-gray-300">
-              <p className="font-semibold text-gray-900 dark:text-white">{selectedRequest.verifier?.company_name || 'Unknown company'}</p>
+            <div className="rounded-xl bg-[var(--bg-surface)] p-4 text-sm text-[var(--text-secondary)]">
+              <p className="font-semibold text-[var(--text-primary)]">{selectedRequest.verifier?.company_name || 'Unknown company'}</p>
               <p className="mt-1 whitespace-pre-line leading-relaxed">{selectedRequest.purpose}</p>
             </div>
 
@@ -316,13 +321,13 @@ export default function StudentAccessRequests() {
       >
         {selectedAccess ? (
           <div className="space-y-5">
-            <div className="rounded-xl bg-gray-50 p-4 text-sm text-gray-600 dark:bg-gray-900/60 dark:text-gray-300">
-              <p className="font-semibold text-gray-900 dark:text-white">
+            <div className="rounded-xl bg-[var(--bg-surface)] p-4 text-sm text-[var(--text-secondary)]">
+              <p className="font-semibold text-[var(--text-primary)]">
                 {selectedAccess.company_name || selectedAccess.verifier?.company_name || 'Unknown company'}
               </p>
               <p className="mt-1">Expires on {new Date(selectedAccess.expires_at).toLocaleDateString()}</p>
             </div>
-            <p className="text-sm text-gray-600 dark:text-gray-300">
+            <p className="text-sm text-[var(--text-secondary)]">
               This will immediately stop the verifier from seeing your certificates.
             </p>
             <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">

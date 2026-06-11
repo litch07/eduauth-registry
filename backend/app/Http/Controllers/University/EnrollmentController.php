@@ -31,27 +31,47 @@ class EnrollmentController extends Controller
             $status = $request->query('status', 'all');
             $search = $request->query('search', '');
 
-            $query = Enrollment::with(['student.user'])
+            $query = Enrollment::with(['student.user', 'certificateLevel', 'department', 'major'])
                 ->where('institution_id', $institution->id);
 
             if ($status !== 'all') {
                 $query->where('status', $status);
             }
 
+            if ($request->filled('certificate_level_id')) {
+                $query->where('certificate_level_id', $request->query('certificate_level_id'));
+            }
+
+            if ($request->filled('department_id')) {
+                $query->where('department_id', $request->query('department_id'));
+            }
+
             if ($search) {
                 $query->where(function ($mainQuery) use ($search) {
                     $mainQuery->whereHas('student', function ($q) use ($search) {
                         $q->where('first_name', 'like', "%{$search}%")
-                          ->orWhere('last_name', 'like', "%{$search}%")
-                          ->orWhere('student_id', 'like', "%{$search}%");
-                    })->orWhere('enrollment_number', 'like', "%{$search}%");
+                          ->orWhere('last_name', 'like', "%{$search}%");
+                    })
+                    ->orWhere('enrollment_number', 'like', "%{$search}%")
+                    ->orWhere('roll_number', 'like', "%{$search}%");
                 });
             }
 
+            // Single aggregation replaces 3 separate COUNT queries
+            $rawStats = DB::table('enrollments')
+                ->selectRaw('
+                    COUNT(*) as total,
+                    SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as active,
+                    SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as graduated
+                ', ['active', 'graduated'])
+                ->where('institution_id', $institution->id)
+                ->whereNull('deleted_at')
+                ->first();
+
             $stats = [
-                'total' => Enrollment::where('institution_id', $institution->id)->count(),
-                'active' => Enrollment::where('institution_id', $institution->id)->where('status', 'active')->count(),
-                'graduated' => Enrollment::where('institution_id', $institution->id)->where('status', 'graduated')->count(),
+                'total'     => (int) ($rawStats->total ?? 0),
+                'active'    => (int) ($rawStats->active ?? 0),
+                'graduated' => (int) ($rawStats->graduated ?? 0),
             ];
 
             $paginator = $query->orderBy('created_at', 'desc')->paginate(15);
@@ -63,9 +83,17 @@ class EnrollmentController extends Controller
                     'student_name' => $enrollment->student
                         ? trim($enrollment->student->first_name . ' ' . $enrollment->student->last_name)
                         : 'N/A',
-                    'student_id' => $enrollment->student?->student_id,
+                    'student_id' => $enrollment->roll_number, // displayed as "Student ID" in UI
+                    'roll_number' => $enrollment->roll_number, // displayed as "Student ID" in UI
                     'student_email' => $enrollment->student?->user?->email,
+                    'db_student_id' => $enrollment->student_id,
                     'program' => $enrollment->program,
+                    'certificate_level_id' => $enrollment->certificate_level_id,
+                    'certificate_level_name' => $enrollment->certificateLevel?->name,
+                    'department_id' => $enrollment->department_id,
+                    'department_name' => $enrollment->department?->name,
+                    'major_id' => $enrollment->major_id,
+                    'major_name' => $enrollment->major?->name,
                     'batch' => $enrollment->batch,
                     'status' => $enrollment->status,
                     'enrollment_date' => $enrollment->enrollment_date,
@@ -149,7 +177,7 @@ class EnrollmentController extends Controller
                 $programsData[$programName]['students'][] = [
                     'id' => $enrollment->id,
                     'student_name' => $enrollment->student ? trim($enrollment->student->first_name . ' ' . $enrollment->student->last_name) : 'N/A',
-                    'student_id' => $enrollment->student?->student_id,
+                    'roll_number' => $enrollment->roll_number, // displayed as "Student ID" in UI
                     'batch' => $enrollment->batch,
                     'enrollment_date' => $enrollment->enrollment_date,
                     'status' => $enrollment->status,
@@ -182,10 +210,12 @@ class EnrollmentController extends Controller
             $validator = Validator::make($request->all(), [
                 'student_email' => 'required|email|exists:users,email',
                 'program' => 'required_without:department_id|string|max:255',
-                'department_id' => 'nullable|integer|exists:departments,id',
+                'department_id' => 'required|integer|exists:departments,id',
+                'major_id' => 'nullable|integer|exists:majors,id',
+                'certificate_level_id' => 'required|integer|exists:certificate_levels,id',
                 'program_level' => 'nullable|string|max:255',
                 'batch' => 'required|string|max:100',
-                'student_id' => ['required', 'string', 'min:5', 'max:50', 'regex:/^[a-zA-Z0-9\-]+$/'],
+                'roll_number' => ['nullable', 'string', 'max:100'],
                 'enrollment_date' => 'required|date',
                 'expected_graduation_date' => 'nullable|date|after:enrollment_date',
             ]);
@@ -212,6 +242,47 @@ class EnrollmentController extends Controller
                 ], 404);
             }
 
+            // Verify the certificate level belongs to this institution
+            $certLevel = \App\Models\CertificateLevel::where('id', $request->certificate_level_id)
+                ->where('institution_id', $institution->id)
+                ->where('is_active', true)
+                ->first();
+
+            if (!$certLevel) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid certificate level for this institution'
+                ], 422);
+            }
+
+            // Verify the department belongs to this institution
+            $department = \App\Models\Department::where('id', $request->department_id)
+                ->where('institution_id', $institution->id)
+                ->where('is_active', true)
+                ->first();
+
+            if (!$department) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid department for this institution'
+                ], 422);
+            }
+
+            // Verify the major belongs to the selected department (only if major_id is provided)
+            if ($request->filled('major_id')) {
+                $major = \App\Models\Major::where('id', $request->major_id)
+                    ->where('department_id', $department->id)
+                    ->where('is_active', true)
+                    ->first();
+
+                if (!$major) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Invalid major for the selected department'
+                    ], 422);
+                }
+            }
+
             $student = $studentUser->student;
 
             if (!$student) {
@@ -221,77 +292,75 @@ class EnrollmentController extends Controller
                 ], 404);
             }
 
-            // CRITICAL: Check for active enrollment in ANY university
-            $activeEnrollment = Enrollment::where('student_id', $student->id)
+            // STEP 1 — Global active enrollment check (across ALL universities).
+            // A student may not be enrolled at two universities simultaneously.
+            $globalActiveEnrollment = Enrollment::where('student_id', $student->id)
                 ->whereIn('status', ['active', 'withdrawal_requested'])
                 ->with('institution')
                 ->first();
 
-            if ($activeEnrollment) {
+            if ($globalActiveEnrollment) {
                 return response()->json([
                     'success' => false,
-                    'message' => "Student is currently enrolled at {$activeEnrollment->institution->name}. A student can only have one active enrollment at a time.",
+                    'message' => 'This student is currently enrolled at another university. They must graduate or complete their withdrawal before enrolling here.',
                     'current_enrollment' => [
-                        'institution' => $activeEnrollment->institution->name,
-                        'program' => $activeEnrollment->program,
-                        'batch' => $activeEnrollment->batch,
-                        'status' => $activeEnrollment->status,
+                        'institution' => $globalActiveEnrollment->institution->name,
+                        'program'     => $globalActiveEnrollment->program,
+                        'batch'       => $globalActiveEnrollment->batch,
+                        'status'      => $globalActiveEnrollment->status,
                     ]
                 ], 409);
             }
 
-            // Check for existing enrollment in THIS university (any non-withdrawn status)
-            $existingInThisUni = Enrollment::where('student_id', $student->id)
+            // STEP 2 — Same-university suspension check.
+            // A suspended student cannot re-enroll at the same university until the suspension is resolved.
+            $suspendedHere = Enrollment::where('student_id', $student->id)
                 ->where('institution_id', $institution->id)
-                ->whereIn('status', ['active', 'graduated', 'suspended', 'withdrawal_requested'])
+                ->where('status', 'suspended')
                 ->first();
 
-            if ($existingInThisUni) {
+            if ($suspendedHere) {
                 return response()->json([
                     'success' => false,
-                    'message' => "Student already has an enrollment record in your institution with status: {$existingInThisUni->status}"
+                    'message' => 'This student has a suspended enrollment at your institution. Please resolve the suspension before creating a new enrollment.',
                 ], 409);
             }
 
-            // Check if the provided student_id is already assigned to another student in this university
-            $duplicateStudent = User::where('role', 'student')
-                ->whereHas('student', function ($q) use ($request) {
-                    $q->where('student_id', $request->student_id);
-                })
-                ->whereHas('student.enrollments', function ($q) use ($institution) {
-                    $q->where('institution_id', $institution->id);
-                })
-                ->where('email', '!=', $request->student_email)
-                ->first();
+            // STEP 3 — Re-enrollment is allowed.
+            // Students who previously graduated or withdrew from this university
+            // are explicitly permitted to enroll again (higher degree, re-admission, etc.).
 
-            if ($duplicateStudent) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Student ID already assigned to another student in your university'
-                ], 422);
+            // Check if the provided roll_number is already assigned to another student in this university
+            if ($request->filled('roll_number')) {
+                $duplicateStudent = Enrollment::where('institution_id', $institution->id)
+                    ->where('roll_number', $request->roll_number)
+                    ->where('student_id', '!=', $student->id)
+                    ->first();
+
+                if ($duplicateStudent) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'This Student ID is already assigned to another student in your university'
+                    ], 422);
+                }
             }
 
-            $enrollment = DB::transaction(function () use ($student, $institution, $request, $user) {
+            $enrollment = DB::transaction(function () use ($student, $institution, $request, $user, $certLevel, $department) {
                 // Generate enrollment number inside transaction to utilize lock
                 $enrollmentNumber = $this->generateEnrollmentNumber($institution);
 
-                // Assign the new student ID
-                $student->update(['student_id' => $request->student_id]);
-
-                // Resolve program name from department if provided
-                $programName = $request->program;
-                if ($request->filled('department_id')) {
-                    $department = \App\Models\Department::find($request->department_id);
-                    if ($department && $department->institution_id === $institution->id) {
-                        $programName = $request->filled('program_level') ? $request->program_level . ' in ' . $department->name : $department->name;
-                    }
-                }
+                // Build program display name as "CertLevel — Department"
+                $programName = $certLevel->name . ' — ' . $department->name;
 
                 // Create enrollment
                 return Enrollment::create([
                     'student_id' => $student->id,
                     'institution_id' => $institution->id,
                     'enrollment_number' => $enrollmentNumber,
+                    'roll_number' => $request->roll_number ?: null,
+                    'department_id' => $request->department_id,
+                    'major_id' => $request->filled('major_id') ? $request->major_id : null,
+                    'certificate_level_id' => $request->certificate_level_id,
                     'program' => $programName,
                     'batch' => $request->batch,
                     'status' => 'active',
@@ -300,6 +369,16 @@ class EnrollmentController extends Controller
                     'enrolled_by' => $user->id,
                 ]);
             });
+
+            // Auto-approve pending enrollment applications for this student at this institution
+            \App\Models\EnrollmentApplication::where('student_id', $student->id)
+                ->where('institution_id', $institution->id)
+                ->where('status', 'pending')
+                ->update([
+                    'status' => 'approved',
+                    'reviewed_by' => $user->id,
+                    'reviewed_at' => now(),
+                ]);
 
             // Send enrollment confirmation email
             try {
@@ -313,10 +392,12 @@ class EnrollmentController extends Controller
             }
 
             // Log activity
+            // HIGH-09: Use $enrollment->program (the computed display name) instead of
+            // $request->program which may be null when student is enrolled by department_id.
             \App\Models\ActivityLog::create([
                 'user_id' => $request->user()->id,
                 'action' => 'STUDENT_ENROLLED',
-                'description' => "Enrolled student {$student->first_name} {$student->last_name} in {$request->program}",
+                'description' => "Enrolled student {$student->first_name} {$student->last_name} in {$enrollment->program}",
                 'ip_address' => $request->ip(),
             ]);
 
@@ -324,7 +405,9 @@ class EnrollmentController extends Controller
                 $student->user->notify(new AppNotification(
                     'ENROLLMENT',
                     'You have been enrolled',
-                    "You have been enrolled in {$request->program} at {$institution->name}.",
+                    // HIGH-10: Use $enrollment->program (the computed display name) instead of
+                    // $request->program which may be null when student is enrolled by department_id.
+                    "You have been enrolled in {$enrollment->program} at {$institution->name}.",
                     '/student/dashboard'
                 ));
             }
@@ -391,11 +474,10 @@ class EnrollmentController extends Controller
             }
 
             $validator = Validator::make($request->all(), [
-                'program' => 'nullable|string|max:255',
-                'department_id' => 'nullable|integer|exists:departments,id',
-                'program_level' => 'nullable|string|max:255',
+                'department_id' => 'required|integer|exists:departments,id',
+                'major_id' => 'nullable|integer|exists:majors,id',
+                'certificate_level_id' => 'required|integer|exists:certificate_levels,id',
                 'batch' => 'nullable|string|max:100',
-                'expected_graduation_date' => 'nullable|date',
             ]);
 
             if ($validator->fails()) {
@@ -405,33 +487,69 @@ class EnrollmentController extends Controller
                 ], 422);
             }
 
-            if ($request->expected_graduation_date) {
-                $enrollmentDate = \Carbon\Carbon::parse($enrollment->enrollment_date);
-                $expectedDate = \Carbon\Carbon::parse($request->expected_graduation_date);
-                if ($expectedDate->lte($enrollmentDate)) {
+            // Verify the certificate level belongs to this institution
+            $certLevel = \App\Models\CertificateLevel::where('id', $request->certificate_level_id)
+                ->where('institution_id', $institution->id)
+                ->where('is_active', true)
+                ->first();
+
+            if (!$certLevel) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid certificate level for this institution'
+                ], 422);
+            }
+
+            // Verify the department belongs to this institution
+            $department = \App\Models\Department::where('id', $request->department_id)
+                ->where('institution_id', $institution->id)
+                ->where('is_active', true)
+                ->first();
+
+            if (!$department) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid department for this institution'
+                ], 422);
+            }
+
+            // Verify the major belongs to the selected department (only if major_id is provided)
+            if ($request->filled('major_id')) {
+                $major = \App\Models\Major::where('id', $request->major_id)
+                    ->where('department_id', $department->id)
+                    ->where('is_active', true)
+                    ->first();
+
+                if (!$major) {
                     return response()->json([
                         'success' => false,
-                        'message' => 'Expected graduation date must be after enrollment date'
+                        'message' => 'Invalid major for the selected department'
                     ], 422);
                 }
             }
 
-            $oldValues = $enrollment->only(['program', 'batch', 'expected_graduation_date']);
-            
-            $updateData = $request->only(['batch', 'expected_graduation_date']);
-            
-            if ($request->filled('department_id')) {
-                $department = \App\Models\Department::find($request->department_id);
-                if ($department && $department->institution_id === $institution->id) {
-                    $updateData['program'] = $request->filled('program_level') ? $request->program_level . ' in ' . $department->name : $department->name;
+            $oldValues = $enrollment->only(['program', 'batch', 'department_id', 'major_id', 'certificate_level_id']);
+
+            $enrollment = DB::transaction(function () use ($enrollment, $request, $department, $certLevel) {
+                // Recompute stored program name from cert level + department
+                $programName = $certLevel->name . ' — ' . $department->name;
+
+                $updateData = [
+                    'certificate_level_id' => $request->certificate_level_id,
+                    'department_id' => $request->department_id,
+                    'major_id' => $request->filled('major_id') ? $request->major_id : null,
+                    'program' => $programName,
+                ];
+
+                if ($request->has('batch') && $request->batch !== null) {
+                    $updateData['batch'] = $request->batch;
                 }
-            } elseif ($request->has('program')) {
-                $updateData['program'] = $request->program;
-            }
 
-            $enrollment->update($updateData);
+                $enrollment->update($updateData);
+                return $enrollment->fresh(['certificateLevel', 'department', 'major']);
+            });
 
-            $newValues = $enrollment->only(['program', 'batch', 'expected_graduation_date']);
+            $newValues = $enrollment->only(['program', 'batch', 'department_id', 'major_id', 'certificate_level_id']);
 
             // Only log if something actually changed
             if ($oldValues !== $newValues) {
@@ -453,8 +571,13 @@ class EnrollmentController extends Controller
                 'enrollment' => [
                     'id' => $enrollment->id,
                     'program' => $enrollment->program,
+                    'certificate_level_id' => $enrollment->certificate_level_id,
+                    'certificate_level_name' => $enrollment->certificateLevel?->name,
+                    'department_id' => $enrollment->department_id,
+                    'department_name' => $enrollment->department?->name,
+                    'major_id' => $enrollment->major_id,
+                    'major_name' => $enrollment->major?->name,
                     'batch' => $enrollment->batch,
-                    'expected_graduation_date' => $enrollment->expected_graduation_date,
                 ]
             ], 200);
 
@@ -541,11 +664,11 @@ class EnrollmentController extends Controller
                     
                 if ($pendingRequest) {
                     $pendingRequest->update([
-                        'status' => $request->status === 'withdrawn' ? 'approved' : 'rejected',
-                        'responded_at' => now(),
-                        'responded_by' => $user->id,
-                        'response_message' => $request->status === 'withdrawn' 
-                            ? 'Approved from enrollment list' 
+                        'status'         => $request->status === 'withdrawn' ? 'approved' : 'rejected',
+                        'reviewed_at'    => now(),
+                        'reviewed_by'    => $user->id,
+                        'rejection_note' => $request->status === 'withdrawn'
+                            ? 'Approved from enrollment list'
                             : 'Rejected from enrollment list',
                     ]);
                 }
@@ -608,17 +731,21 @@ class EnrollmentController extends Controller
      */
     private function generateEnrollmentNumber($institution)
     {
-        $prefix = strtoupper(substr($institution->name, 0, 3));
+        $institutionPrefix = strtoupper(substr($institution->name, 0, 3));
         $year = date('y');
+        $seqPrefix = $institutionPrefix . '_' . $institution->id;
         $sequenceKey = 'enrollment_serial_' . $institution->id;
 
         // same lockForUpdate pattern as certificate serials — keeps numbers unique under concurrency
-        $sequence = \App\Models\CertificateSequence::where('sequence_key', $sequenceKey)->lockForUpdate()->first();
+        $sequence = \App\Models\CertificateSequence::where('prefix', $seqPrefix)
+            ->where('year_suffix', $year)
+            ->lockForUpdate()
+            ->first();
 
         if (!$sequence) {
             $sequence = \App\Models\CertificateSequence::create([
                 'sequence_key' => $sequenceKey,
-                'prefix' => $prefix,
+                'prefix' => $seqPrefix,
                 'year_suffix' => $year,
                 'current_sequence' => 0,
             ]);
@@ -637,7 +764,7 @@ class EnrollmentController extends Controller
 
         $serialNumber = str_pad((string) $sequence->current_sequence, 6, '0', STR_PAD_LEFT);
         
-        return $prefix . '-' . $year . '-' . $serialNumber;
+        return $institutionPrefix . '-' . $year . '-' . $serialNumber;
     }
 
     /**
@@ -646,8 +773,7 @@ class EnrollmentController extends Controller
     public function searchStudents(Request $request)
     {
         try {
-            $search = $request->query('search', '');
-            $enrolled = $request->query('enrolled', 'false') === 'true';
+            $search = $request->query('search', $request->query('q', ''));
             $user = $request->user();
             $institution = $user->institution;
 
@@ -658,55 +784,56 @@ class EnrollmentController extends Controller
                 ], 400);
             }
 
-            $query = Student::with('user')
+            $nidHash = hash('sha256', trim($search));
+
+            $query = Student::with(['user', 'enrollments.institution'])
                 ->whereHas('user', function ($q) {
                     $q->where('role', 'student')
                       ->where('is_approved', true);
                 })
-                ->where(function ($q) use ($search) {
-                    $q->where('first_name', 'like', "%{$search}%")
+                ->where(function ($q) use ($search, $nidHash) {
+                    $q->where('nid_hash', $nidHash)
+                      ->orWhere('first_name', 'like', "%{$search}%")
                       ->orWhere('last_name', 'like', "%{$search}%")
-                      ->orWhere('student_id', 'like', "%{$search}%")
                       ->orWhereHas('user', function ($uq) use ($search) {
                           $uq->where('email', 'like', "%{$search}%");
+                      })
+                      ->orWhereHas('enrollments', function ($eq) use ($search) {
+                          $eq->where('roll_number', 'like', "%{$search}%");
                       });
                 });
 
-            if ($enrolled) {
-                // Return ONLY enrolled students for this institution
+            if ($request->boolean('enrolled')) {
                 $query->whereHas('enrollments', function ($q) use ($institution) {
-                    $q->where('institution_id', $institution->id)
-                      ->whereIn('status', ['active', 'graduated']);
-                });
-                // We also need the enrollment data to return program/batch
-                $query->with(['enrollments' => function ($q) use ($institution) {
-                    $q->where('institution_id', $institution->id);
-                }]);
-            } else {
-                // Return students NOT enrolled or having blocking statuses in this institution
-                $query->whereDoesntHave('enrollments', function ($q) use ($institution) {
                     $q->where('institution_id', $institution->id)
                       ->whereIn('status', ['active', 'graduated', 'suspended', 'withdrawal_requested']);
                 });
             }
 
-            $students = $query->limit(20)->get()->map(function ($student) use ($enrolled) {
-                $data = [
-                    'id' => $student->id,
-                    'name' => $student->first_name . ' ' . $student->last_name,
-                    'student_id' => $student->student_id,
-                    'email' => $student->user->email,
-                    'phone' => $student->phone,
-                ];
+            $students = $query->limit(20)->get()->map(function ($student) use ($institution) {
+                $isEnrolledHere = false;
+                $activeEnrollmentInstitution = null;
 
-                if ($enrolled && $student->enrollments->isNotEmpty()) {
-                    $enrollment = $student->enrollments->first();
-                    $data['program'] = $enrollment->program ?? 'N/A';
-                    $data['batch'] = $enrollment->batch ?? 'N/A';
-                    $data['enrollment_status'] = $enrollment->status ?? 'N/A';
+                foreach ($student->enrollments as $enrollment) {
+                    // Check if enrolled here (any status except withdrawn implies they have a record)
+                    if ($enrollment->institution_id === $institution->id && in_array($enrollment->status, ['active', 'graduated', 'suspended', 'withdrawal_requested'])) {
+                        $isEnrolledHere = true;
+                    }
+
+                    // Check if actively enrolled anywhere
+                    if (in_array($enrollment->status, ['active', 'withdrawal_requested'])) {
+                        $activeEnrollmentInstitution = $enrollment->institution->name;
+                    }
                 }
 
-                return $data;
+                return [
+                    'id'               => $student->id,
+                    'name'             => trim("{$student->first_name} {$student->middle_name} {$student->last_name}"),
+                    'email'            => $student->user->email,
+                    'is_enrolled_here' => $isEnrolledHere,
+                    'is_enrolled_anywhere' => $activeEnrollmentInstitution !== null,
+                    'active_institution'   => $activeEnrollmentInstitution,
+                ];
             });
 
             return response()->json([
@@ -718,6 +845,61 @@ class EnrollmentController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to search students',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Show full student profile
+     */
+    public function showStudent(Request $request, $id)
+    {
+        try {
+            $user = $request->user();
+            $institution = $user->institution;
+
+            $student = Student::with(['user', 'enrollments.institution'])->findOrFail($id);
+
+            // Ownership check: student must be enrolled at this institution
+            $isEnrolled = $student->enrollments
+                ->where('institution_id', $institution->id)
+                ->isNotEmpty();
+
+            if (!$isEnrolled) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This student is not enrolled at your institution.',
+                ], 403);
+            }
+
+            // Note: NID is not returned.
+            return response()->json([
+                'success' => true,
+                'student' => [
+                    'id'            => $student->id,
+                    'name'          => trim("{$student->first_name} {$student->middle_name} {$student->last_name}"),
+                    'email'         => $student->user->email,
+                    'phone'         => $student->phone,
+                    'gender'        => ucfirst($student->gender),
+                    'date_of_birth' => $student->date_of_birth ? $student->date_of_birth->format('d/m/Y') : null,
+                    'address'       => $student->address,
+                    'enrollments'   => $student->enrollments->map(function ($enr) {
+                        return [
+                            'institution'       => $enr->institution->name,
+                            'program'           => $enr->program,
+                            'batch'             => $enr->batch,
+                            'status'            => $enr->status,
+                            'enrollment_date'   => $enr->enrollment_date ? $enr->enrollment_date->format('d/m/Y') : null,
+                        ];
+                    }),
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch student details',
                 'error' => $e->getMessage()
             ], 500);
         }
@@ -847,33 +1029,40 @@ class EnrollmentController extends Controller
                 })
                 ->orderByRaw("FIELD(status, 'pending', 'counter_offered', 'approved', 'rejected')")
                 ->orderBy('created_at', 'desc')
-                ->get()
-                ->map(function ($req) {
-                    return [
-                        'id' => $req->id,
-                        'enrollment_id' => $req->enrollment_id,
-                        'student_name' => $req->student
-                            ? trim($req->student->first_name . ' ' . $req->student->last_name)
-                            : 'N/A',
-                        'student_email' => $req->student?->user?->email,
-                        'program' => $req->enrollment->program,
-                        'batch' => $req->enrollment->batch,
-                        'current_expected_graduation' => $req->enrollment->expected_graduation_date,
-                        'requested_graduation_date' => $req->requested_graduation_date,
-                        'reason' => $req->reason,
-                        'supporting_document_path' => $req->supporting_document_path,
-                        'status' => $req->status,
-                        'university_response' => $req->university_response,
-                        'counter_offered_date' => $req->counter_offered_date,
-                        'reviewed_by' => $req->reviewer?->email,
-                        'reviewed_at' => $req->reviewed_at,
-                        'created_at' => $req->created_at,
-                    ];
-                });
+                ->paginate(10);
+
+            $mappedRequests = $requests->getCollection()->map(function ($req) {
+                return [
+                    'id' => $req->id,
+                    'enrollment_id' => $req->enrollment_id,
+                    'student_name' => $req->student
+                        ? trim($req->student->first_name . ' ' . $req->student->last_name)
+                        : 'N/A',
+                    'student_email' => $req->student?->user?->email,
+                    'program' => $req->enrollment->program,
+                    'batch' => $req->enrollment->batch,
+                    'current_expected_graduation' => $req->enrollment->expected_graduation_date,
+                    'requested_graduation_date' => $req->requested_graduation_date,
+                    'reason' => $req->reason,
+                    'supporting_document_path' => $req->supporting_document_path,
+                    'status' => $req->status,
+                    'university_response' => $req->university_response,
+                    'counter_offered_date' => $req->counter_offered_date,
+                    'reviewed_by' => $req->reviewer?->email,
+                    'reviewed_at' => $req->reviewed_at,
+                    'created_at' => $req->created_at,
+                ];
+            });
 
             return response()->json([
                 'success' => true,
-                'requests' => $requests,
+                'requests' => $mappedRequests,
+                'pagination' => [
+                    'current_page' => $requests->currentPage(),
+                    'last_page' => $requests->lastPage(),
+                    'total' => $requests->total(),
+                    'per_page' => $requests->perPage(),
+                ]
             ], 200);
 
         } catch (\Exception $e) {
@@ -1182,35 +1371,56 @@ class EnrollmentController extends Controller
                 ], 404);
             }
 
-            $applications = \App\Models\EnrollmentApplication::with(['student.user', 'reviewer'])
+            $applications = \App\Models\EnrollmentApplication::with(['student.user', 'student.certificates.institution', 'reviewer', 'certificateLevel', 'department'])
                 ->where('institution_id', $institution->id)
-                ->orderByRaw("FIELD(status, 'pending', 'more_info_requested', 'approved', 'rejected')")
+                ->orderByRaw("FIELD(status, 'pending', 'approved', 'rejected')")
                 ->orderBy('created_at', 'desc')
-                ->get()
-                ->map(function ($app) {
-                    return [
-                        'id' => $app->id,
-                        'student_id' => $app->student_id,
-                        'student_name' => $app->student
-                            ? trim($app->student->first_name . ' ' . $app->student->last_name)
-                            : 'N/A',
-                        'student_email' => $app->student?->user?->email,
-                        'student_current_id' => $app->student?->student_id,
-                        'program' => $app->program,
-                        'batch' => $app->batch,
-                        'reason' => $app->reason,
-                        'document_path' => $app->document_path,
-                        'status' => $app->status,
-                        'university_response' => $app->university_response,
-                        'reviewed_by' => $app->reviewer?->email,
-                        'reviewed_at' => $app->reviewed_at,
-                        'created_at' => $app->created_at,
-                    ];
-                });
+                ->paginate(10);
+
+            $mappedApplications = $applications->getCollection()->map(function ($app) {
+                return [
+                    'id' => $app->id,
+                    'student_id' => $app->student_id,
+                    'student_name' => $app->student
+                        ? trim($app->student->first_name . ' ' . $app->student->last_name)
+                        : 'N/A',
+                    'student_email' => $app->student?->user?->email,
+                    'certificate_level_id' => $app->certificate_level_id,
+                    'department_id' => $app->department_id,
+                    'certificate_level_name' => $app->certificateLevel ? $app->certificateLevel->name : null,
+                    'department_name' => $app->department ? $app->department->name : null,
+                    'batch' => $app->batch,
+                    'reason' => $app->reason,
+                    'document_path' => $app->document_path,
+                    'status' => $app->status,
+                    'university_response' => $app->university_response,
+                    'reviewed_by' => $app->reviewer?->email,
+                    'reviewed_at' => $app->reviewed_at,
+                    'created_at' => $app->created_at,
+                    'certificates' => $app->student ? $app->student->certificates->map(function ($cert) {
+                        return [
+                            'id' => $cert->id,
+                            'certificate_number' => $cert->serial,
+                            'title' => $cert->certificate_name,
+                            'issue_date' => $cert->issue_date,
+                            'program_name' => trim($cert->certificate_level . ' ' . $cert->major),
+                            'grade' => $cert->cgpa,
+                            'status' => $cert->revoked_at ? 'revoked' : 'valid',
+                            'institution' => $cert->institution ? $cert->institution->name : 'Unknown Institution',
+                        ];
+                    })->values()->toArray() : [],
+                ];
+            });
 
             return response()->json([
                 'success' => true,
-                'applications' => $applications,
+                'applications' => $mappedApplications,
+                'pagination' => [
+                    'current_page' => $applications->currentPage(),
+                    'last_page' => $applications->lastPage(),
+                    'total' => $applications->total(),
+                    'per_page' => $applications->perPage(),
+                ]
             ], 200);
 
         } catch (\Exception $e) {
@@ -1230,7 +1440,7 @@ class EnrollmentController extends Controller
     {
         try {
             $validator = Validator::make($request->all(), [
-                'student_id' => ['required', 'string', 'min:5', 'max:50', 'regex:/^[a-zA-Z0-9\-]+$/'],
+                'roll_number' => ['nullable', 'string', 'max:100'],
                 'program_level' => 'nullable|string|max:255',
                 'department_id' => 'nullable|integer|exists:departments,id',
                 'batch' => 'required|string|max:100',
@@ -1299,7 +1509,7 @@ class EnrollmentController extends Controller
             // Check for existing enrollment in THIS university (same as store())
             $existingInThisUni = Enrollment::where('student_id', $student->id)
                 ->where('institution_id', $institution->id)
-                ->whereIn('status', ['active', 'graduated', 'suspended', 'withdrawal_requested'])
+                ->whereIn('status', ['active', 'suspended', 'withdrawal_requested'])
                 ->first();
 
             if ($existingInThisUni) {
@@ -1309,33 +1519,27 @@ class EnrollmentController extends Controller
                 ], 409);
             }
 
-            // Check if the provided student_id is already assigned to another student (same as store())
-            $duplicateStudent = User::where('role', 'student')
-                ->whereHas('student', function ($q) use ($request) {
-                    $q->where('student_id', $request->student_id);
-                })
-                ->whereHas('student.enrollments', function ($q) use ($institution) {
-                    $q->where('institution_id', $institution->id);
-                })
-                ->where('id', '!=', $student->user_id)
-                ->first();
+            // Check if the provided roll_number is already assigned to another student in this university
+            if ($request->filled('roll_number')) {
+                $duplicateStudent = Enrollment::where('institution_id', $institution->id)
+                    ->where('roll_number', $request->roll_number)
+                    ->where('student_id', '!=', $student->id)
+                    ->first();
 
-            if ($duplicateStudent) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Student ID already assigned to another student in your university'
-                ], 422);
+                if ($duplicateStudent) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'This Student ID is already assigned to another student in your university'
+                    ], 422);
+                }
             }
 
             $enrollment = DB::transaction(function () use ($student, $institution, $request, $user, $application) {
                 // Generate enrollment number inside transaction (same as store())
                 $enrollmentNumber = $this->generateEnrollmentNumber($institution);
 
-                // Assign the new student ID
-                $student->update(['student_id' => $request->student_id]);
-
                 // Resolve program name from department if provided (same as store())
-                $programName = $application->program ?? $request->program;
+                $programName = $request->program;
                 if ($request->filled('department_id')) {
                     $department = \App\Models\Department::find($request->department_id);
                     if ($department && $department->institution_id === $institution->id) {
@@ -1351,6 +1555,10 @@ class EnrollmentController extends Controller
                     'student_id' => $student->id,
                     'institution_id' => $institution->id,
                     'enrollment_number' => $enrollmentNumber,
+                    'roll_number' => $request->roll_number ?: null,
+                    'department_id' => $request->department_id,
+                    'certificate_level_id' => $application->certificate_level_id,
+                    'major_id' => $application->major_id ?? null,
                     'program' => $programName,
                     'batch' => $request->batch ?: $application->batch,
                     'status' => 'active',
@@ -1465,7 +1673,7 @@ class EnrollmentController extends Controller
 
             $application = \App\Models\EnrollmentApplication::where('id', $id)
                 ->where('institution_id', $institution->id)
-                ->whereIn('status', ['pending', 'more_info_requested'])
+                ->where('status', 'pending')
                 ->with(['student.user'])
                 ->first();
 
@@ -1515,83 +1723,145 @@ class EnrollmentController extends Controller
         }
     }
 
-    /**
-     * Request more information from the student regarding their application.
-     */
-    public function requestMoreInfo(Request $request, $id)
+    public function programChangeRequests(Request $request)
     {
+        $user = $request->user();
+        $institution = $user->institution;
+
+        $requests = \App\Models\ProgramChangeRequest::with([
+            'student.user', 
+            'enrollment.department', 
+            'enrollment.major', 
+            'requestedDepartment', 
+            'requestedMajor'
+        ])
+            ->where('institution_id', $institution->id)
+            ->orderBy('created_at', 'desc')
+            ->get()
+            ->map(function ($req) {
+                return [
+                    'id' => $req->id,
+                    'student_name' => $req->student?->user?->name,
+                    'roll_number' => $req->enrollment?->roll_number, // displayed as "Student ID" in UI
+                    'current_department' => $req->enrollment?->department?->name,
+                    'current_major' => $req->enrollment?->major?->name,
+                    'requested_department' => $req->requestedDepartment?->name,
+                    'requested_major' => $req->requestedMajor?->name,
+                    'reason' => $req->reason,
+                    'status' => $req->status,
+                    'admin_note' => $req->admin_note,
+                    'created_at' => $req->created_at,
+                ];
+            });
+
+        return response()->json([
+            'success' => true,
+            'requests' => $requests
+        ]);
+    }
+
+    public function approveProgramChange(Request $request, $id)
+    {
+        $user = $request->user();
+        $institution = $user->institution;
+
+        $programRequest = \App\Models\ProgramChangeRequest::with(['enrollment', 'student.user', 'requestedDepartment', 'requestedMajor'])
+            ->where('id', $id)
+            ->where('institution_id', $institution->id)
+            ->first();
+
+        if (!$programRequest) {
+            return response()->json(['success' => false, 'message' => 'Request not found or unauthorized'], 404);
+        }
+
+        if ($programRequest->status !== 'pending') {
+            return response()->json(['success' => false, 'message' => 'Only pending requests can be approved'], 400);
+        }
+
+        DB::beginTransaction();
         try {
-            $validator = Validator::make($request->all(), [
-                'university_response' => 'required|string|min:10|max:1000',
+            // Update the enrollment
+            $enrollment = $programRequest->enrollment;
+            $programStr = $programRequest->requestedMajor ? $programRequest->requestedMajor->name . ' in ' . $programRequest->requestedDepartment->name : $programRequest->requestedDepartment->name;
+            
+            $enrollment->update([
+                'department_id' => $programRequest->requested_department_id,
+                'major_id' => $programRequest->requested_major_id,
+                'program' => $programStr
             ]);
 
-            if ($validator->fails()) {
-                return response()->json([
-                    'success' => false,
-                    'errors' => $validator->errors()
-                ], 422);
-            }
-
-            $user = $request->user();
-            $institution = $user->institution;
-
-            if (!$institution) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Institution not found'
-                ], 404);
-            }
-
-            $application = \App\Models\EnrollmentApplication::where('id', $id)
-                ->where('institution_id', $institution->id)
-                ->where('status', 'pending')
-                ->with(['student.user'])
-                ->first();
-
-            if (!$application) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Application not found or not in pending status'
-                ], 404);
-            }
-
-            $application->update([
-                'status' => 'more_info_requested',
-                'university_response' => $request->university_response,
-                'reviewed_by' => $user->id,
-                'reviewed_at' => now(),
-            ]);
-
-            // Log activity
-            \App\Models\ActivityLog::create([
-                'user_id' => $user->id,
-                'action' => 'ENROLLMENT_APPLICATION_MORE_INFO',
-                'description' => "Requested more info on enrollment application from {$application->student->first_name} {$application->student->last_name}",
-                'ip_address' => $request->ip(),
+            // Mark request as approved
+            $programRequest->update([
+                'status' => 'approved',
+                'admin_note' => $request->admin_note
             ]);
 
             // Notify student
-            if ($application->student?->user) {
-                $application->student->user->notify(new AppNotification(
-                    'ENROLLMENT',
-                    'More Information Requested',
-                    "The university {$institution->name} needs additional information regarding your enrollment application.",
+            if ($programRequest->student && $programRequest->student->user) {
+                $programRequest->student->user->notify(new \App\Notifications\AppNotification(
+                    'PROGRAM_CHANGE_APPROVED',
+                    'Program Change Approved',
+                    "Your request to change your program to {$programStr} has been approved.",
                     '/student/my-university'
                 ));
             }
 
+            DB::commit();
+
             return response()->json([
                 'success' => true,
-                'message' => 'More information request sent to student',
-            ], 200);
-
+                'message' => 'Program change request approved successfully'
+            ]);
         } catch (\Exception $e) {
+            DB::rollBack();
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to request more information',
+                'message' => 'Failed to approve request',
                 'error' => $e->getMessage()
             ], 500);
         }
     }
-}
 
+    public function rejectProgramChange(Request $request, $id)
+    {
+        $user = $request->user();
+        $institution = $user->institution;
+
+        $programRequest = \App\Models\ProgramChangeRequest::with(['student.user'])
+            ->where('id', $id)
+            ->where('institution_id', $institution->id)
+            ->first();
+
+        if (!$programRequest) {
+            return response()->json(['success' => false, 'message' => 'Request not found or unauthorized'], 404);
+        }
+
+        if ($programRequest->status !== 'pending') {
+            return response()->json(['success' => false, 'message' => 'Only pending requests can be rejected'], 400);
+        }
+
+        $request->validate([
+            'admin_note' => 'required|string|max:1000'
+        ]);
+
+        $programRequest->update([
+            'status' => 'rejected',
+            'admin_note' => $request->admin_note
+        ]);
+
+        // Notify student
+        if ($programRequest->student && $programRequest->student->user) {
+            $programRequest->student->user->notify(new \App\Notifications\AppNotification(
+                'PROGRAM_CHANGE_REJECTED',
+                'Program Change Rejected',
+                "Your request to change your program has been rejected. Reason: {$request->admin_note}",
+                '/student/my-university'
+            ));
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Program change request rejected'
+        ]);
+    }
+}

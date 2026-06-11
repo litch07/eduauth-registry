@@ -45,25 +45,32 @@ class WithdrawalController extends Controller
                 })
                 ->where('status', 'pending')
                 ->orderBy('created_at', 'asc')
-                ->get()
-                ->map(function ($req) {
-                    return [
-                        'id' => $req->id,
-                        'enrollment_id' => $req->enrollment_id,
-                        'student_name' => trim($req->enrollment->student->first_name . ' ' . $req->enrollment->student->last_name),
-                        'student_email' => $req->enrollment->student->user->email ?? 'N/A',
-                        'enrollment_number' => $req->enrollment->enrollment_number,
-                        'program' => $req->enrollment->program,
-                        'batch' => $req->enrollment->batch,
-                        'requested_by' => 'student',
-                        'reason' => $req->reason,
-                        'requested_at' => $req->created_at,
-                    ];
-                });
+                ->paginate(10);
+
+            $mappedRequests = $requests->getCollection()->map(function ($req) {
+                return [
+                    'id' => $req->id,
+                    'enrollment_id' => $req->enrollment_id,
+                    'student_name' => trim($req->enrollment->student->first_name . ' ' . $req->enrollment->student->last_name),
+                    'student_email' => $req->enrollment->student->user->email ?? 'N/A',
+                    'enrollment_number' => $req->enrollment->enrollment_number,
+                    'program' => $req->enrollment->program,
+                    'batch' => $req->enrollment->batch,
+                    'requested_by' => 'student',
+                    'reason' => $req->reason,
+                    'requested_at' => $req->created_at,
+                ];
+            });
 
             return response()->json([
                 'success' => true,
-                'requests' => $requests,
+                'requests' => $mappedRequests,
+                'pagination' => [
+                    'current_page' => $requests->currentPage(),
+                    'last_page' => $requests->lastPage(),
+                    'total' => $requests->total(),
+                    'per_page' => $requests->perPage(),
+                ]
             ], 200);
 
         } catch (\Exception $e) {

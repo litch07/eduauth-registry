@@ -12,10 +12,12 @@ class EnrollmentApplication extends Model
     protected $fillable = [
         'student_id',
         'institution_id',
-        'program',
+        'certificate_level_id',
+        'department_id',
         'batch',
         'reason',
         'document_path',
+        'consent_provided',
         'status',
         'university_response',
         'reviewed_by',
@@ -43,6 +45,16 @@ class EnrollmentApplication extends Model
         return $this->belongsTo(User::class, 'reviewed_by');
     }
 
+    public function department()
+    {
+        return $this->belongsTo(Department::class);
+    }
+
+    public function certificateLevel()
+    {
+        return $this->belongsTo(CertificateLevel::class);
+    }
+
     // ── Scopes ─────────────────────────────────────────────
 
     public function scopePending($query)
@@ -50,8 +62,8 @@ class EnrollmentApplication extends Model
         return $query->where('status', 'pending');
     }
 
-    public function scopeActive($query)
+    public function scopeOpen($query)
     {
-        return $query->whereIn('status', ['pending', 'more_info_requested']);
+        return $query->where('status', 'pending');
     }
 }

@@ -16,27 +16,28 @@
         }
         .certificate-container {
             border: 8px solid #0d2b5e;
-            padding: 6px;
-            height: 640px;
+            padding: 10px;
+            height: 660px;
         }
         .certificate-inner {
             border: 2px solid #bda853;
-            height: 636px;
+            height: 656px;
             padding: 0;
             margin: 0;
             text-align: center;
+            position: relative;
         }
         .header {
-            margin-top: 50px;
-            font-size: 36px;
+            margin-top: 60px;
+            font-size: 38px;
             font-weight: bold;
             color: #0d2b5e;
             text-transform: uppercase;
             letter-spacing: 2px;
         }
         .title {
-            margin-top: 15px;
-            font-size: 46px;
+            margin-top: 20px;
+            font-size: 48px;
             font-style: italic;
             color: #bda853;
         }
@@ -44,66 +45,117 @@
             font-size: 26px;
             font-weight: bold;
             color: #111;
-            display: inline-block;
         }
         .certificate-text {
             font-family: 'Times New Roman', serif;
             font-size: 24px;
-            line-height: 1.2;
+            line-height: 40px; /* clear gap between lines */
             color: #334155;
-            margin: 50px auto 0;
-            width: 85%;
+            margin: 35px auto 0;
+            width: 80%;
             text-align: center;
         }
         .certificate-meta {
             font-family: 'Times New Roman', serif;
             font-size: 20px;
-            line-height: 1.2;
+            line-height: 29px;
             color: #334155;
-            margin: 15px auto 0;
-            width: 85%;
+            margin: 14px auto 0;
+            width: 80%;
             text-align: center;
         }
         table.footer {
-            width: 90%;
-            margin: 38px auto 0;
+            width: 100%;
+            margin: 35px auto 0;
         }
         table.footer td {
-            text-align: center;
             vertical-align: bottom;
-            width: 33.33%;
+            width: 50%;
+        }
+        .footer-block-left {
+            width: 220px;
+            margin-left: 15px;
+            text-align: center;
+        }
+        .footer-block-right {
+            width: 260px;
+            margin-right: 15px;
+            margin-left: auto;
+            text-align: center;
         }
         .signature-line {
             border-top: 1px solid #333;
-            width: 200px;
-            margin: 0 auto 5px;
+            width: 220px;
+            margin: 0 auto 12px;
         }
         .signature-text {
             font-family: 'Helvetica', 'Arial', sans-serif;
-            font-size: 14px;
+            font-size: 15px;
             font-weight: bold;
             color: #0d2b5e;
+            line-height: 22px;
         }
         .signature-sub {
             font-family: 'Helvetica', 'Arial', sans-serif;
-            font-size: 12px;
+            font-size: 13px;
             color: #555;
+            line-height: 20px;
+            margin-top: 6px;
         }
         .qr-code img {
-            width: 90px;
-            height: 90px;
+            width: 100px;
+            height: 100px;
+            margin-bottom: 8px;
         }
         .serial-text {
             font-family: monospace;
-            font-size: 12px;
+            font-size: 13px;
             color: #777;
-            margin-top: 8px;
+            margin-top: 12px;
+        }
+        .top-left-date {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            text-align: left;
+            font-family: 'Helvetica', 'Arial', sans-serif;
+            font-size: 13px;
+            color: #555;
+            line-height: 18px;
+        }
+        .top-right-date {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            text-align: right;
+            font-family: 'Helvetica', 'Arial', sans-serif;
+            font-size: 13px;
+            color: #555;
+            line-height: 18px;
+        }
+        .date-label {
+            font-size: 14px;
+            font-weight: bold;
+            color: #0d2b5e;
+            margin-right: 4px;
         }
     </style>
 </head>
 <body>
     <div class="certificate-container">
         <div class="certificate-inner">
+            <div class="top-left-date">
+                @if($certificate->convocation_date)
+                    <span class="date-label">Convocation Date:</span>
+                    {{ $certificate->convocation_date->format('F j, Y') }}
+                @endif
+            </div>
+
+            <div class="top-right-date">
+                <span class="date-label">Issue Date:</span>
+                {{ $certificate->issue_date->format('F j, Y') }}
+            </div>
+
             <div class="header">{{ $institution->name }}</div>
 
             <div class="title">Certificate of Achievement</div>
@@ -112,21 +164,30 @@
                 This is to certify that <span class="student-name">{{ $student->user->name }}</span> has successfully completed the requirements for the degree of <strong>{{ $certificate->certificate_level }}@if($certificate->certificate_name) {{ $certificate->certificate_name }}@endif</strong>@if($certificate->major) in <strong>{{ $certificate->major }}</strong>@endif.
             </div>
 
+            @if($certificate->enrollment && ($certificate->enrollment->roll_number || $certificate->enrollment->enrollment_number))
+            <div class="certificate-meta">
+                Student ID: <strong>{{ $certificate->enrollment->roll_number ?? $certificate->enrollment->enrollment_number }}</strong>
+            </div>
+            @endif
+
             @if($certificate->session)
             <div class="certificate-meta">
                 Academic Session: <strong>{{ $certificate->session }}</strong>
             </div>
             @endif
 
-            @if($certificate->cgpa || $certificate->degree_class)
+            @php
+                $hasClass = !empty($certificate->degree_class) && !in_array(strtolower(trim($certificate->degree_class)), ['n/a', 'none', 'null', 'na', 'not applicable', '-']);
+            @endphp
+            @if($certificate->cgpa || $hasClass)
             <div class="certificate-meta">
                 @if($certificate->cgpa)
                     CGPA: <strong>{{ number_format($certificate->cgpa, 2) }}</strong>/4.00
                 @endif
-                @if($certificate->cgpa && $certificate->degree_class)
+                @if($certificate->cgpa && $hasClass)
                     &nbsp;|&nbsp;
                 @endif
-                @if($certificate->degree_class)
+                @if($hasClass)
                     Class: <strong>{{ $certificate->degree_class }}</strong>
                 @endif
             </div>
@@ -135,27 +196,19 @@
             <table class="footer">
                 <tr>
                     <td>
-                        <div class="signature-text" style="margin-bottom: 5px;">
-                            Issue Date:<br>
-                            {{ $certificate->issue_date->format('F j, Y') }}
+                        <div class="footer-block-left">
+                            <div class="qr-code">
+                                <img src="data:image/svg+xml;base64,{{ $qrCode }}" alt="QR Code">
+                            </div>
+                            <div class="serial-text">Serial No: {{ $certificate->serial }}</div>
                         </div>
-                        @if($certificate->convocation_date)
-                        <div class="signature-sub" style="margin-top: 10px;">
-                            Convocation Date:<br>
-                            {{ $certificate->convocation_date->format('F j, Y') }}
-                        </div>
-                        @endif
                     </td>
                     <td>
-                        <div class="qr-code">
-                            <img src="data:image/svg+xml;base64,{{ $qrCode }}" alt="QR Code">
+                        <div class="footer-block-right">
+                            <div class="signature-line"></div>
+                            <div class="signature-text">{{ $certificate->authority_name ?? 'Issuing Authority' }}</div>
+                            <div class="signature-sub">{{ $certificate->authority_title ?? 'Authorized Signatory' }}</div>
                         </div>
-                        <div class="serial-text">Serial No: {{ $certificate->serial }}</div>
-                    </td>
-                    <td>
-                        <div class="signature-line"></div>
-                        <div class="signature-text">{{ $certificate->authority_name ?? 'Issuing Authority' }}</div>
-                        <div class="signature-sub">{{ $certificate->authority_title ?? 'Authorized Signatory' }}</div>
                     </td>
                 </tr>
             </table>

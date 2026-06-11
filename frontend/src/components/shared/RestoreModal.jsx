@@ -23,13 +23,13 @@ export default function RestoreModal({ certificate, onClose, onConfirm, loading 
     <Modal open={!!certificate} onClose={onClose} title="Restore Certificate">
       <div className="space-y-4">
         {/* Info banner */}
-        <div className="flex items-start gap-3 rounded-xl bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 px-4 py-3">
-          <ShieldCheck className="h-5 w-5 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
+        <div className="flex items-start gap-3 rounded-xl bg-[var(--success)]/10 border border-[var(--success)]/30 px-4 py-3">
+          <ShieldCheck className="h-5 w-5 text-[var(--success)] flex-shrink-0 mt-0.5" />
           <div>
-            <p className="text-sm font-semibold text-green-800 dark:text-green-300">
+            <p className="text-sm font-semibold text-[var(--success)]">
               Restore Certificate
             </p>
-            <p className="text-xs text-green-700 dark:text-green-400 mt-0.5">
+            <p className="text-xs text-[var(--success)] mt-0.5">
               Serial:{' '}
               <span className="font-mono font-bold">{certificate?.serial}</span>
               <br />
@@ -41,9 +41,9 @@ export default function RestoreModal({ certificate, onClose, onConfirm, loading 
         <div>
           <label
             htmlFor="restore-reason"
-            className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300"
+            className="mb-1 block text-sm font-medium text-[var(--text-primary)]"
           >
-            Reason for Restoration <span className="text-red-500">*</span>
+            Reason for Restoration <span className="text-[var(--danger)]">*</span>
           </label>
           <textarea
             id="restore-reason"
@@ -55,7 +55,7 @@ export default function RestoreModal({ certificate, onClose, onConfirm, loading 
             placeholder="Describe why this certificate is being restored (min. 10 characters)..."
             required
           />
-          <p className="mt-1 text-xs text-gray-400">
+          <p className="mt-1 text-xs text-[var(--text-muted)]">
             {reason.length} / 1000 characters
           </p>
         </div>

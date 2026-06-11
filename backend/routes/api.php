@@ -1,10 +1,12 @@
 <?php
 
+use App\Http\Controllers\Admin\ActivityLogController;
 use App\Http\Controllers\Admin\AnalyticsController;
 use App\Http\Controllers\Admin\CertificateController as AdminCertificateController;
 use App\Http\Controllers\Admin\ProfileChangeRequestController as AdminProfileChangeRequestController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Auth\LoginController;
+use App\Http\Controllers\Auth\PasswordResetController;
 use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\Auth\VerificationController;
 use App\Http\Controllers\CertificateController;
@@ -18,10 +20,14 @@ use App\Http\Controllers\Student\DashboardController as StudentDashboard;
 use App\Http\Controllers\Student\WithdrawalController as StudentWithdrawalController;
 use App\Http\Controllers\Student\ExtensionRequestController as StudentExtensionRequestController;
 use App\Http\Controllers\Student\EnrollmentApplicationController as StudentEnrollmentApplicationController;
+use App\Http\Controllers\Student\ProgramChangeRequestController as StudentProgramChangeRequestController;
 use App\Http\Controllers\University\CertificateController as UniversityCertificate;
+use App\Http\Controllers\University\CertificateLevelController;
 use App\Http\Controllers\University\DashboardController as UniversityDashboard;
 use App\Http\Controllers\University\DepartmentController;
 use App\Http\Controllers\University\EnrollmentController;
+use App\Http\Controllers\University\MajorController;
+use App\Http\Controllers\University\SettingsController as UniversitySettingsController;
 use App\Http\Controllers\University\WithdrawalController as UniversityWithdrawalController;
 use App\Http\Controllers\Verifier\AccessRequestController as VerifierAccessRequestController;
 use App\Http\Controllers\Verifier\VerifyController;
@@ -29,10 +35,16 @@ use Illuminate\Support\Facades\Route;
 
 Route::post('/auth/register', [RegisterController::class, 'register']);
 Route::post('/auth/login', [LoginController::class, 'login']);
+Route::post('/auth/forgot-password', [PasswordResetController::class, 'sendResetLinkEmail']);
+Route::post('/auth/reset-password', [PasswordResetController::class, 'resetPassword']);
 Route::post('/auth/verify-email', [VerificationController::class, 'verifyEmail']);
 Route::post('/auth/resend-verification', [VerificationController::class, 'resendVerificationCode']);
+Route::post('/auth/verify-email-change', [VerificationController::class, 'verifyEmailChange']);
 Route::post('/verify/certificate', [VerifyController::class, 'verify']);
 Route::get('/verify-link', [VerifyController::class, 'verifyFromLink']);
+Route::get('/verify/system-stats', [VerifyController::class, 'systemStats']);
+Route::get('/public/universities', [VerifyController::class, 'publicUniversities']);
+Route::get('/public/health', [VerifyController::class, 'health']);
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/auth/logout', [LoginController::class, 'logout']);
@@ -41,6 +53,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/profile', [ProfileController::class, 'show']);
     Route::put('/profile', [ProfileController::class, 'update']);
     Route::put('/profile/password', [ProfileController::class, 'updatePassword']);
+    Route::delete('/profile/email-change', [ProfileController::class, 'cancelEmailChange']);
     Route::get('/profile/activity', [ProfileController::class, 'activity']);
 
     Route::get('/profile/change-requests', [ProfileChangeRequestController::class, 'myRequests']);
@@ -84,18 +97,38 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/extension-requests/{id}/decline', [StudentExtensionRequestController::class, 'declineCounterOffer']);
 
         Route::get('/universities', [StudentEnrollmentApplicationController::class, 'institutions']);
+        Route::get('/universities/{id}/programs', [StudentEnrollmentApplicationController::class, 'programs']);
         Route::get('/enrollment-applications', [StudentEnrollmentApplicationController::class, 'index']);
         Route::post('/enrollment-applications', [StudentEnrollmentApplicationController::class, 'store']);
         Route::delete('/enrollment-applications/{id}', [StudentEnrollmentApplicationController::class, 'destroy']);
+
+        Route::get('/program-change-requests', [StudentProgramChangeRequestController::class, 'index']);
+        Route::post('/program-change-requests', [StudentProgramChangeRequestController::class, 'store']);
+        Route::delete('/program-change-requests/{id}', [StudentProgramChangeRequestController::class, 'destroy']);
     });
 
     Route::prefix('university')->middleware(\App\Http\Middleware\CheckRole::class.':university')->group(function () {
         Route::get('/dashboard', [UniversityDashboard::class, 'index']);
         
+        Route::put('/settings/authority', [UniversitySettingsController::class, 'updateAuthority']);
+
+        Route::get('/certificate-levels', [CertificateLevelController::class, 'index']);
+        Route::post('/certificate-levels', [CertificateLevelController::class, 'store']);
+        Route::put('/certificate-levels/{id}', [CertificateLevelController::class, 'update']);
+        Route::delete('/certificate-levels/{id}', [CertificateLevelController::class, 'destroy']);
+        Route::post('/certificate-levels/{id}/reactivate', [CertificateLevelController::class, 'reactivate']);
+        
+        Route::get('/majors', [MajorController::class, 'index']);
+        Route::post('/majors', [MajorController::class, 'store']);
+        Route::put('/majors/{id}', [MajorController::class, 'update']);
+        Route::delete('/majors/{id}', [MajorController::class, 'destroy']);
+        Route::post('/majors/{id}/reactivate', [MajorController::class, 'reactivate']);
+        
         Route::get('/departments', [DepartmentController::class, 'index']);
         Route::post('/departments', [DepartmentController::class, 'store']);
         Route::put('/departments/{id}', [DepartmentController::class, 'update']);
         Route::delete('/departments/{id}', [DepartmentController::class, 'destroy']);
+        Route::post('/departments/{id}/reactivate', [DepartmentController::class, 'reactivate']);
 
         Route::get('/enrollments', [EnrollmentController::class, 'index']);
         Route::get('/enrollments/programs', [EnrollmentController::class, 'programs']);
@@ -104,13 +137,17 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::patch('/enrollments/{id}/status', [EnrollmentController::class, 'updateStatus']);
         Route::patch('/enrollments/{id}/extend-graduation', [EnrollmentController::class, 'extendGraduation']);
         Route::get('/students/search', [EnrollmentController::class, 'searchStudents']);
+        Route::get('/students/{id}', [EnrollmentController::class, 'showStudent']);
 
         Route::post('/certificates', [UniversityCertificate::class, 'store']);
         Route::post('/certificates/batch', [UniversityCertificate::class, 'batchIssue']);
         Route::get('/certificates/batch-template', [UniversityCertificate::class, 'downloadSampleCSV']);
         Route::get('/certificates', [UniversityCertificate::class, 'index']);
         Route::get('/certificates/prefill/{studentId}', [UniversityCertificate::class, 'prefill']);
+        Route::get('/certificates/{id}', [UniversityCertificate::class, 'show']);
+        Route::get('/certificates/{id}/download', [UniversityCertificate::class, 'downloadPdf']);
         Route::post('/certificates/{id}/revoke', [CertificateController::class, 'revoke']);
+        Route::post('/certificates/{id}/unrevoke', [UniversityCertificate::class, 'unrevoke']);
 
         Route::get('/withdrawal/pending', [UniversityWithdrawalController::class, 'pendingRequests']);
         Route::post('/withdrawal/{id}/approve', [UniversityWithdrawalController::class, 'approveWithdrawal']);
@@ -122,10 +159,13 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/extension-requests/{id}/reject', [EnrollmentController::class, 'rejectExtension']);
         Route::post('/extension-requests/{id}/counter-offer', [EnrollmentController::class, 'counterOfferExtension']);
 
+        Route::get('/program-change-requests', [EnrollmentController::class, 'programChangeRequests']);
+        Route::post('/program-change-requests/{id}/approve', [EnrollmentController::class, 'approveProgramChange']);
+        Route::post('/program-change-requests/{id}/reject', [EnrollmentController::class, 'rejectProgramChange']);
+
         Route::get('/enrollment-applications', [EnrollmentController::class, 'applications']);
         Route::post('/enrollment-applications/{id}/approve', [EnrollmentController::class, 'approveApplication']);
         Route::post('/enrollment-applications/{id}/reject', [EnrollmentController::class, 'rejectApplication']);
-        Route::post('/enrollment-applications/{id}/request-more-info', [EnrollmentController::class, 'requestMoreInfo']);
     });
 
     Route::prefix('verifier')->middleware(\App\Http\Middleware\CheckRole::class.':verifier')->group(function () {
@@ -149,6 +189,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/pending-users', [UserController::class, 'pendingUsers']);
         Route::post('/approve-user/{id}', [UserController::class, 'approveUser']);
         Route::post('/reject-user/{id}', [UserController::class, 'rejectUser']);
+        Route::post('/users/{id}/suspend', [UserController::class, 'suspendUser']);
+        Route::post('/users/{id}/unsuspend', [UserController::class, 'unsuspendUser']);
         Route::get('/certificates', [CertificateController::class, 'index']);
         Route::post('/certificates/{id}/revoke', [CertificateController::class, 'revoke']);
         Route::post('/certificates/{id}/restore', [AdminCertificateController::class, 'restore']);
@@ -167,6 +209,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/profile-change-requests/{id}/approve', [AdminProfileChangeRequestController::class, 'approve']);
         Route::post('/profile-change-requests/{id}/reject', [AdminProfileChangeRequestController::class, 'reject']);
         Route::get('/profile-change-requests/{id}/documents/{index}', [AdminProfileChangeRequestController::class, 'downloadDocument']);
+        
+        Route::get('/activity-logs', [ActivityLogController::class, 'index']);
     });
 });
 

@@ -14,6 +14,11 @@ CREATE TABLE users (
   approved_by BIGINT UNSIGNED NULL,
   approved_at TIMESTAMP NULL,
   remember_token VARCHAR(100) NULL,
+  pending_email VARCHAR(255) NULL,
+  pending_email_token VARCHAR(255) NULL,
+  pending_email_expires_at TIMESTAMP NULL,
+  suspended_at TIMESTAMP NULL DEFAULT NULL,
+  suspension_reason TEXT NULL,
   created_at TIMESTAMP NULL,
   updated_at TIMESTAMP NULL,
   deleted_at TIMESTAMP NULL,
@@ -23,6 +28,13 @@ CREATE TABLE users (
   SET
     NULL
 );
+
+CREATE TABLE password_reset_tokens (
+  email VARCHAR(255) PRIMARY KEY,
+  token VARCHAR(255) NOT NULL,
+  created_at TIMESTAMP NULL
+);
+
 
 CREATE TABLE personal_access_tokens (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -60,10 +72,11 @@ CREATE TABLE students (
   middle_name VARCHAR(255) NULL,
   last_name VARCHAR(255) NOT NULL,
   nid_hash VARCHAR(64) NOT NULL UNIQUE,
+  nid_encrypted TEXT NULL,
   date_of_birth DATE NOT NULL,
+  gender ENUM('Male','Female','Other') NULL,
   phone VARCHAR(30) NULL,
   address TEXT NULL,
-  student_id VARCHAR(50) NOT NULL UNIQUE,
   created_at TIMESTAMP NULL,
   updated_at TIMESTAMP NULL,
   deleted_at TIMESTAMP NULL,
@@ -80,11 +93,51 @@ CREATE TABLE institutions (
   city VARCHAR(120) NOT NULL,
   phone VARCHAR(30) NOT NULL,
   website VARCHAR(255) NULL,
+  default_authority_name VARCHAR(255) NULL,
+  default_authority_title VARCHAR(255) NULL,
   created_at TIMESTAMP NULL,
   updated_at TIMESTAMP NULL,
   deleted_at TIMESTAMP NULL,
   INDEX idx_institutions_name_city (name, city),
   CONSTRAINT fk_institutions_user_id FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE certificate_levels (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  institution_id BIGINT UNSIGNED NOT NULL,
+  name VARCHAR(255) NOT NULL,
+  short_code VARCHAR(50) NOT NULL,
+  is_active TINYINT(1) NOT NULL DEFAULT 1,
+  created_at TIMESTAMP NULL,
+  updated_at TIMESTAMP NULL,
+  INDEX idx_certificate_levels_institution (institution_id),
+  CONSTRAINT fk_certificate_levels_institution FOREIGN KEY (institution_id) REFERENCES institutions(id) ON DELETE CASCADE
+);
+
+CREATE TABLE departments (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  institution_id BIGINT UNSIGNED NOT NULL,
+  certificate_level_id BIGINT UNSIGNED NULL DEFAULT NULL,
+  name VARCHAR(255) NOT NULL,
+  short_code VARCHAR(100) NULL,
+  is_active TINYINT(1) NOT NULL DEFAULT 1,
+  created_at TIMESTAMP NULL,
+  updated_at TIMESTAMP NULL,
+  INDEX idx_departments_institution (institution_id),
+  INDEX idx_departments_certificate_level (certificate_level_id),
+  CONSTRAINT fk_departments_institution FOREIGN KEY (institution_id) REFERENCES institutions(id) ON DELETE CASCADE,
+  CONSTRAINT fk_departments_certificate_level FOREIGN KEY (certificate_level_id) REFERENCES certificate_levels(id) ON DELETE SET NULL
+);
+
+CREATE TABLE majors (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  department_id BIGINT UNSIGNED NOT NULL,
+  name VARCHAR(255) NOT NULL,
+  is_active TINYINT(1) NOT NULL DEFAULT 1,
+  created_at TIMESTAMP NULL,
+  updated_at TIMESTAMP NULL,
+  INDEX idx_majors_department (department_id),
+  CONSTRAINT fk_majors_department FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE CASCADE
 );
 
 CREATE TABLE verifiers (
@@ -110,35 +163,49 @@ CREATE TABLE enrollments (
   enrollment_number VARCHAR(255) NOT NULL UNIQUE,
   student_id BIGINT UNSIGNED NOT NULL,
   institution_id BIGINT UNSIGNED NOT NULL,
+  roll_number VARCHAR(100) NULL,
+  department_id BIGINT UNSIGNED NULL,
+  major_id BIGINT UNSIGNED NULL,
   program VARCHAR(255) NOT NULL,
   batch VARCHAR(255) NOT NULL,
   status ENUM('active', 'graduated', 'suspended', 'withdrawn') NOT NULL DEFAULT 'active',
+  suspension_reason TEXT NULL,
   enrollment_date DATE NOT NULL,
   expected_graduation_date DATE NULL,
   actual_graduation_date DATE NULL,
   enrolled_by BIGINT UNSIGNED NOT NULL,
+  certificate_level_id BIGINT UNSIGNED DEFAULT NULL,
   created_at TIMESTAMP NULL,
   updated_at TIMESTAMP NULL,
   deleted_at TIMESTAMP NULL,
   INDEX idx_enrollments_student_institution (student_id, institution_id),
   INDEX idx_enrollments_status (status),
   INDEX idx_enrollments_enrollment_date (enrollment_date),
+  INDEX idx_fk_enrollments_student (student_id),
+  INDEX idx_fk_enrollments_institution (institution_id),
+  INDEX idx_fk_enrollments_enrolled_by (enrolled_by),
+  INDEX idx_fk_enrollments_cert_level (certificate_level_id),
+  INDEX idx_fk_enrollments_department (department_id),
+  INDEX idx_fk_enrollments_major (major_id),
   UNIQUE KEY uq_enrollment_active (student_id, institution_id, status),
   CONSTRAINT fk_enrollments_student_id FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE,
   CONSTRAINT fk_enrollments_institution FOREIGN KEY (institution_id) REFERENCES institutions(id) ON DELETE CASCADE,
-  CONSTRAINT fk_enrollments_enrolled_by FOREIGN KEY (enrolled_by) REFERENCES users(id) ON DELETE CASCADE
+  CONSTRAINT fk_enrollments_enrolled_by FOREIGN KEY (enrolled_by) REFERENCES users(id) ON DELETE CASCADE,
+  CONSTRAINT fk_enrollments_cert_level FOREIGN KEY (certificate_level_id) REFERENCES certificate_levels(id) ON DELETE SET NULL,
+  CONSTRAINT fk_enrollments_department FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE SET NULL,
+  CONSTRAINT fk_enrollments_major FOREIGN KEY (major_id) REFERENCES majors(id) ON DELETE SET NULL
 );
 
 CREATE TABLE certificate_sequences (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  sequence_key VARCHAR(255) NOT NULL UNIQUE,
+  sequence_key VARCHAR(255) NOT NULL,
   prefix VARCHAR(20) NOT NULL DEFAULT 'BSC',
   year_suffix VARCHAR(2) NOT NULL,
   current_sequence BIGINT UNSIGNED NOT NULL DEFAULT 0,
   last_generated_at TIMESTAMP NULL,
   created_at TIMESTAMP NULL,
   updated_at TIMESTAMP NULL,
-  INDEX idx_sequence_prefix_year (prefix, year_suffix)
+  UNIQUE KEY uq_sequence_prefix_year (prefix, year_suffix)
 );
 
 CREATE TABLE certificates (
@@ -149,9 +216,12 @@ CREATE TABLE certificates (
   issued_by BIGINT UNSIGNED NOT NULL,
   serial VARCHAR(255) NOT NULL UNIQUE,
   certificate_level VARCHAR(50) NOT NULL,
+  certificate_level_id BIGINT UNSIGNED NULL,
   certificate_name VARCHAR(255) NOT NULL,
   department VARCHAR(255) NOT NULL,
+  department_id BIGINT UNSIGNED NULL,
   major VARCHAR(255) NULL,
+  major_id BIGINT UNSIGNED NULL,
   session VARCHAR(100) NOT NULL,
   cgpa DECIMAL(4, 2) NULL,
   degree_class VARCHAR(100) NULL,
@@ -160,9 +230,12 @@ CREATE TABLE certificates (
   authority_name VARCHAR(255) NOT NULL,
   authority_title VARCHAR(255) NOT NULL,
   pdf_path VARCHAR(255) NULL,
+  issued_name VARCHAR(255) NULL,
+  revocation_history JSON NULL,
   is_publicly_shareable TINYINT(1) NOT NULL DEFAULT 1,
   revoked_at TIMESTAMP NULL,
   revoked_by BIGINT UNSIGNED NULL,
+  revoked_by_role ENUM('university','admin') NULL DEFAULT NULL,
   revocation_reason TEXT NULL,
   created_at TIMESTAMP NULL,
   updated_at TIMESTAMP NULL,
@@ -172,15 +245,17 @@ CREATE TABLE certificates (
   INDEX idx_certificates_serial (serial),
   INDEX idx_certificates_is_publicly_shareable (is_publicly_shareable),
   INDEX idx_certificates_revoked_at (revoked_at),
+  INDEX idx_certificates_certificate_level_id (certificate_level_id),
+  INDEX idx_certificates_department_id (department_id),
+  INDEX idx_certificates_major_id (major_id),
   CONSTRAINT fk_certificates_student FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE,
   CONSTRAINT fk_certificates_institution FOREIGN KEY (institution_id) REFERENCES institutions(id) ON DELETE CASCADE,
-  CONSTRAINT fk_certificates_enrollment FOREIGN KEY (enrollment_id) REFERENCES enrollments(id) ON DELETE
-  SET
-    NULL,
-    CONSTRAINT fk_certificates_issued_by FOREIGN KEY (issued_by) REFERENCES users(id) ON DELETE CASCADE,
-    CONSTRAINT fk_certificates_revoked_by FOREIGN KEY (revoked_by) REFERENCES users(id) ON DELETE
-  SET
-    NULL
+  CONSTRAINT fk_certificates_enrollment FOREIGN KEY (enrollment_id) REFERENCES enrollments(id) ON DELETE SET NULL,
+  CONSTRAINT fk_certificates_issued_by FOREIGN KEY (issued_by) REFERENCES users(id) ON DELETE CASCADE,
+  CONSTRAINT fk_certificates_revoked_by FOREIGN KEY (revoked_by) REFERENCES users(id) ON DELETE SET NULL,
+  CONSTRAINT fk_certificates_certificate_level FOREIGN KEY (certificate_level_id) REFERENCES certificate_levels(id) ON DELETE SET NULL,
+  CONSTRAINT fk_certificates_department FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE SET NULL,
+  CONSTRAINT fk_certificates_major FOREIGN KEY (major_id) REFERENCES majors(id) ON DELETE SET NULL
 );
 
 CREATE TABLE certificate_access_requests (
@@ -349,11 +424,13 @@ CREATE TABLE enrollment_applications (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     student_id BIGINT UNSIGNED NOT NULL,
     institution_id BIGINT UNSIGNED NOT NULL,
-    program VARCHAR(255) NULL,
+    certificate_level_id BIGINT UNSIGNED DEFAULT NULL,
+    department_id BIGINT UNSIGNED DEFAULT NULL,
     batch VARCHAR(100) NULL,
     reason TEXT NULL,
     document_path VARCHAR(255) NULL,
-    status ENUM('pending', 'approved', 'rejected', 'more_info_requested') NOT NULL DEFAULT 'pending',
+    consent_provided TINYINT(1) NOT NULL DEFAULT 0,
+    status ENUM('pending', 'approved', 'rejected') NOT NULL DEFAULT 'pending',
     university_response TEXT NULL,
     reviewed_by BIGINT UNSIGNED NULL,
     reviewed_at TIMESTAMP NULL,
@@ -361,5 +438,43 @@ CREATE TABLE enrollment_applications (
     updated_at TIMESTAMP NULL,
     FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE,
     FOREIGN KEY (institution_id) REFERENCES institutions(id) ON DELETE CASCADE,
-    FOREIGN KEY (reviewed_by) REFERENCES users(id) ON DELETE SET NULL
-);
+    FOREIGN KEY (reviewed_by) REFERENCES users(id) ON DELETE SET NULL,
+    FOREIGN KEY (certificate_level_id) REFERENCES certificate_levels(id) ON DELETE SET NULL,
+    FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE SET NULL
+);
+
+CREATE TABLE extension_requests (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  enrollment_id BIGINT UNSIGNED NOT NULL,
+  student_id BIGINT UNSIGNED NOT NULL,
+  requested_graduation_date DATE NOT NULL,
+  reason TEXT NOT NULL,
+  supporting_document_path VARCHAR(255) NULL,
+  status ENUM('pending', 'approved', 'rejected', 'counter_offered') NOT NULL DEFAULT 'pending',
+  university_response TEXT NULL,
+  counter_offered_date DATE NULL,
+  reviewed_by BIGINT UNSIGNED NULL,
+  reviewed_at TIMESTAMP NULL,
+  created_at TIMESTAMP NULL,
+  updated_at TIMESTAMP NULL,
+  CONSTRAINT fk_extension_enrollment FOREIGN KEY (enrollment_id) REFERENCES enrollments(id) ON DELETE CASCADE,
+  CONSTRAINT fk_extension_student FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE,
+  CONSTRAINT fk_extension_reviewed FOREIGN KEY (reviewed_by) REFERENCES users(id) ON DELETE SET NULL
+);
+
+CREATE TABLE program_change_requests (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  enrollment_id BIGINT UNSIGNED NOT NULL,
+  student_id BIGINT UNSIGNED NOT NULL,
+  institution_id BIGINT UNSIGNED NOT NULL,
+  requested_department_id BIGINT UNSIGNED NOT NULL,
+  requested_major_id BIGINT UNSIGNED NULL,
+  reason TEXT NOT NULL,
+  status ENUM('pending', 'approved', 'rejected', 'cancelled') NOT NULL DEFAULT 'pending',
+  admin_note TEXT NULL,
+  created_at TIMESTAMP NULL,
+  updated_at TIMESTAMP NULL,
+  CONSTRAINT fk_pcr_enrollment FOREIGN KEY (enrollment_id) REFERENCES enrollments(id) ON DELETE CASCADE,
+  CONSTRAINT fk_pcr_student FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE,
+  CONSTRAINT fk_pcr_institution FOREIGN KEY (institution_id) REFERENCES institutions(id) ON DELETE CASCADE
+);

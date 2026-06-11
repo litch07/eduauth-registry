@@ -1,24 +1,34 @@
-import { Loader2 } from 'lucide-react';
+import React from 'react';
 import { cn } from '../../utils/helpers';
 
 export default function Button({
   children,
   variant = 'primary',
+  size = 'md',
   type = 'button',
   onClick,
   disabled = false,
   loading = false,
   className = '',
+  icon,
   ...props
 }) {
-  const baseClasses = 'inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium transition duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-gray-900 disabled:cursor-not-allowed disabled:opacity-50 min-h-[44px]';
+  const baseClasses = 'inline-flex items-center justify-center rounded-[8px] font-medium transition-colors focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50';
 
   const variants = {
-    primary: 'bg-primary-600 text-white hover:bg-primary-700 focus:ring-primary-500',
-    secondary: 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600 focus:ring-gray-400',
-    danger: 'bg-red-600 text-white hover:bg-red-700 focus:ring-red-500',
-    success: 'bg-green-600 text-white hover:bg-green-700 focus:ring-green-500',
-    outline: 'border border-gray-300 bg-transparent text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-800 focus:ring-gray-400',
+    primary: 'bg-[var(--brand)] text-[var(--text-inverse)] hover:bg-[var(--brand-hover)]',
+    secondary: 'border border-[var(--border-strong)] bg-transparent text-[var(--text-primary)] hover:bg-[var(--bg-elevated)]',
+    danger: 'bg-[var(--danger)] text-[var(--text-inverse)] opacity-90 hover:opacity-100',
+    success: 'bg-[var(--success)] text-[var(--text-inverse)] hover:bg-[var(--success-hover)]',
+    info: 'bg-[var(--info)] text-[var(--text-inverse)] hover:bg-[var(--info-hover)]',
+    ghost: 'bg-transparent text-[var(--text-primary)] hover:bg-[var(--bg-elevated)]',
+    link: 'text-[var(--brand)] underline-offset-4 hover:underline !p-0 !h-auto',
+  };
+
+  const sizes = {
+    sm: 'h-8 px-3 text-xs',
+    md: 'h-9 px-4 text-sm',
+    lg: 'h-11 px-5 text-base',
   };
 
   return (
@@ -26,10 +36,13 @@ export default function Button({
       type={type}
       onClick={onClick}
       disabled={disabled || loading}
-      className={cn(baseClasses, variants[variant], className)}
+      className={cn(baseClasses, variants[variant], sizes[size], className)}
       {...props}
     >
-      {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+      {loading && (
+        <span className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+      )}
+      {!loading && icon && <span className="mr-1 inline-flex">{icon}</span>}
       {children}
     </button>
   );

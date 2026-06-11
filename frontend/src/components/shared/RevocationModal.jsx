@@ -17,12 +17,12 @@ export default function RevocationModal({ certificate, onClose, onConfirm }) {
   return (
     <Modal open={!!certificate} onClose={onClose} title="Revoke Certificate">
       <div className="space-y-4">
-        <p className="text-sm text-gray-600 dark:text-gray-400">
+        <p className="text-sm text-[var(--text-secondary)]">
           You are about to revoke the certificate with serial number{' '}
-          <span className="font-bold text-gray-900 dark:text-white">{certificate?.serial}</span>. This action is irreversible.
+          <span className="font-bold text-[var(--text-primary)]">{certificate?.serial}</span>. This action is irreversible.
         </p>
         <div>
-          <label htmlFor="revocation-reason" className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+          <label htmlFor="revocation-reason" className="mb-1 block text-sm font-medium text-[var(--text-primary)]">
             Reason for Revocation
           </label>
           <textarea

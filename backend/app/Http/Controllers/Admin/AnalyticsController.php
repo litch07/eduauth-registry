@@ -20,20 +20,23 @@ class AnalyticsController extends Controller
         $days = $request->query('days', 30);
         $startDate = Carbon::now()->subDays($days);
 
-        $overview = [
-            'totalUsers' => User::whereNull('deleted_at')->count(),
-            'totalStudents' => User::where('role', 'student')->whereNull('deleted_at')->count(),
-            'totalUniversities' => User::where('role', 'university')->whereNull('deleted_at')->count(),
-            'totalVerifiers' => User::where('role', 'verifier')->whereNull('deleted_at')->count(),
-            'totalCertificates' => Certificate::whereNull('deleted_at')->count(),
-            'pendingApprovals' => User::where('is_approved', false)
-                ->whereNull('deleted_at')
-                ->whereIn('role', ['student', 'university', 'verifier'])
-                ->count(),
-            'pendingProfileChanges' => \App\Models\ProfileChangeRequest::where('status', 'pending')->count(),
-            'activityToday' => ActivityLog::whereDate('created_at', Carbon::today())->count(),
-            'totalVerifications' => VerificationLog::count(),
-        ];
+        $overview = cache()->remember("analytics_overview_{$days}", 60, function () {
+            return [
+                'totalUsers'            => User::whereNull('deleted_at')->count(),
+                'totalStudents'         => User::where('role', 'student')->whereNull('deleted_at')->count(),
+                'totalUniversities'     => User::where('role', 'university')->whereNull('deleted_at')->count(),
+                'totalVerifiers'        => User::where('role', 'verifier')->whereNull('deleted_at')->count(),
+                'totalCertificates'     => Certificate::whereNull('deleted_at')->count(),
+                'pendingApprovals'      => User::where('is_approved', false)
+                    ->whereNull('deleted_at')
+                    ->whereIn('role', ['student', 'university', 'verifier'])
+                    ->count(),
+                'pendingProfileChanges' => \App\Models\ProfileChangeRequest::where('status', 'pending')->count(),
+                'activityToday'         => ActivityLog::whereDate('created_at', Carbon::today())->count(),
+                'totalVerifications'    => VerificationLog::count(),
+            ];
+        });
+
 
         $registrations = User::where('created_at', '>=', $startDate)
             ->groupBy(DB::raw('DATE(created_at)'))

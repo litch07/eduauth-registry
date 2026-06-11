@@ -9,4 +9,28 @@ export default defineConfig({
     strictPort: false,
     open: true,
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-react': [
+            'react',
+            'react-dom',
+            'react-router-dom'
+          ],
+          'vendor-ui': [
+            '@headlessui/react',
+            'lucide-react'
+          ],
+          'vendor-forms': [
+            'react-hook-form',
+            '@hookform/resolvers',
+            'yup'
+          ],
+          'vendor-charts': ['recharts'],
+          'vendor-pdf': ['html2pdf.js'],
+        }
+      }
+    }
+  }
 });

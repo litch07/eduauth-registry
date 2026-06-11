@@ -20,6 +20,11 @@ class User extends Authenticatable
         'is_approved',
         'approved_by',
         'approved_at',
+        'pending_email',
+        'pending_email_token',
+        'pending_email_expires_at',
+        'suspended_at',
+        'suspension_reason',
     ];
 
     protected $hidden = [
@@ -28,10 +33,12 @@ class User extends Authenticatable
     ];
 
     protected $casts = [
-        'email_verified_at' => 'datetime',
-        'approved_at' => 'datetime',
-        'is_approved' => 'boolean',
-        'password' => 'hashed',
+        'email_verified_at'        => 'datetime',
+        'approved_at'              => 'datetime',
+        'pending_email_expires_at' => 'datetime',
+        'suspended_at'             => 'datetime',
+        'is_approved'              => 'boolean',
+        'password'                 => 'hashed',
     ];
 
     public function student()

@@ -176,30 +176,30 @@ export default function ProfileChangeRequests() {
                   </thead>
                   <tbody className="divide-y divide-gray-100 text-sm dark:divide-gray-800">
                     {requests.map((req) => (
-                      <tr key={req.id} className="hover:bg-gray-50/50 dark:hover:bg-gray-900/20">
-                        <td className="py-3 pr-4">
+                      <tr key={req.id} className="h-12 hover:bg-gray-50/50 dark:hover:bg-gray-900/20 transition">
+                        <td className="py-0 pr-4">
                           <p className="font-medium text-gray-900 dark:text-white">{req.user_name}</p>
                           <p className="text-xs text-gray-500 dark:text-gray-400">{req.user_email}</p>
                         </td>
-                        <td className="py-3 pr-4">
+                        <td className="py-0 pr-4">
                           <Badge variant="secondary">{roleLabels[req.user_role] || req.user_role}</Badge>
                         </td>
-                        <td className="py-3 pr-4 font-medium text-gray-800 dark:text-gray-200">{req.field_label}</td>
-                        <td className="py-3 pr-4">
+                        <td className="py-0 pr-4 font-medium text-gray-800 dark:text-gray-200">{req.field_label}</td>
+                        <td className="py-0 pr-4">
                           <p className="text-xs">
                             <span className="text-gray-400 line-through">{req.current_value || 'N/A'}</span>
                             <span className="mx-1">→</span>
                             <span className="font-medium text-primary-600 dark:text-primary-400">{req.requested_value}</span>
                           </p>
                         </td>
-                        <td className="py-3 pr-4">
+                        <td className="py-0 pr-4">
                           <Badge variant={statusVariants[req.status]}>{req.status.toUpperCase()}</Badge>
                         </td>
-                        <td className="py-3 pr-4 text-xs text-gray-500">{formatDate(req.created_at)}</td>
-                        <td className="py-3">
+                        <td className="py-0 pr-4 text-xs text-gray-500">{formatDate(req.created_at)}</td>
+                        <td className="py-0">
                           <button
                             onClick={() => viewDetails(req.id)}
-                            className="rounded-lg p-1.5 text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/20"
+                            className="rounded-lg p-1.5 text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition"
                             title="View details"
                           >
                             <Eye className="h-4 w-4" />

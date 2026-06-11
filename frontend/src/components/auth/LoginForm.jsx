@@ -49,15 +49,15 @@ export default function LoginForm() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-md space-y-8 rounded-3xl border border-white/10 bg-white/90 p-8 shadow-2xl shadow-slate-900/10 backdrop-blur dark:bg-gray-900/80">
-      <div className="space-y-2 text-center">
-        <p className="text-sm font-semibold uppercase tracking-[0.15em] text-primary-600">EduAuth Registry</p>
-        <h2 className="text-3xl font-bold text-gray-900 dark:text-white">Sign in</h2>
+    <div className="w-full">
+      <div className="space-y-2 mb-8">
+        <h2 className="text-3xl font-bold text-[var(--text-primary)]">Welcome back</h2>
+        <p className="text-[var(--text-secondary)]">Sign in to your account</p>
       </div>
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
         {serverError ? (
-          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-900/20 dark:text-red-300">
+          <div className="rounded-[8px] border border-[var(--danger)]/30 bg-[var(--danger)]/10 px-4 py-3 text-sm text-[var(--danger)]">
             {serverError}
           </div>
         ) : null}
@@ -70,21 +70,35 @@ export default function LoginForm() {
           error={errors.email?.message}
         />
 
-        <Input
-          type="password"
-          label="Password"
-          placeholder="••••••••"
-          {...register('password')}
-          error={errors.password?.message}
-        />
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <label className="block text-sm font-medium text-[var(--text-secondary)]">Password</label>
+            <Link to="/forgot-password" className="text-sm font-medium text-[var(--brand)] hover:underline">Forgot password?</Link>
+          </div>
+          <Input
+            type="password"
+            placeholder="••••••••"
+            {...register('password')}
+            error={errors.password?.message}
+          />
+        </div>
 
-        <Button type="submit" loading={isSubmitting} className="w-full">
-          Sign in
+        <Button type="submit" loading={isSubmitting} className="w-full mt-2" size="lg">
+          Sign In
         </Button>
       </form>
 
-      <p className="text-center text-sm text-gray-600 dark:text-gray-400">
-        Don&apos;t have an account? <Link to="/register" className="font-medium text-primary-600 hover:text-primary-700">Register here</Link>
+      <div className="mt-8 flex items-center justify-center space-x-4">
+        <span className="h-[1px] w-full bg-[var(--border)]"></span>
+        <span className="text-xs font-semibold uppercase text-[var(--text-muted)]">or</span>
+        <span className="h-[1px] w-full bg-[var(--border)]"></span>
+      </div>
+
+      <p className="mt-8 text-center text-sm text-[var(--text-secondary)]">
+        Don&apos;t have an account?{' '}
+        <Link to="/register" className="font-semibold text-[var(--brand)] hover:underline">
+          Register
+        </Link>
       </p>
     </div>
   );

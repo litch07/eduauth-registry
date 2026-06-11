@@ -155,7 +155,7 @@ class AccessRequestController extends Controller
                     return response()->json(['success' => false, 'message' => 'Invalid email format.'], 400);
                 }
 
-                $student = Student::with('user', 'institution')
+                $student = Student::with('user', 'activeEnrollments.institution')
                     ->whereHas('user', function ($q) use ($query) {
                         $q->where('email', $query)->where('role', 'student');
                     })
@@ -163,14 +163,11 @@ class AccessRequestController extends Controller
             } elseif (preg_match('/^\d{10,17}$/', $query)) {
                 // NID Search
                 $nidHash = hash('sha256', $query);
-                $student = Student::with('user', 'institution')
+                $student = Student::with('user', 'activeEnrollments.institution')
                     ->where('nid_hash', $nidHash)
                     ->first();
             } else {
-                // Student ID Search
-                $student = Student::with('user', 'institution')
-                    ->where('student_id', $query)
-                    ->first();
+                 return response()->json(['success' => false, 'message' => 'Invalid search format. Please use email or NID/Birth Certificate.'], 400);
             }
 
             if (!$student || ($student->user && !$student->user->is_approved)) {
@@ -186,6 +183,7 @@ class AccessRequestController extends Controller
 
             $allowSearch     = $studentSettings ? ($studentSettings->allow_verifier_search ?? true) : true;
             $showEmail       = $studentSettings ? ($studentSettings->show_email_to_verifiers ?? false) : false;
+            $showInstitution = $studentSettings ? ($studentSettings->show_institution_to_public ?? true) : true;
 
             if (!$allowSearch) {
                 // Student has opted out of verifier search — return nothing
@@ -215,11 +213,14 @@ class AccessRequestController extends Controller
             }
 
             // ── Build result — conditionally include email ───────────────────────
+            $activeEnrollment = $student->activeEnrollments->first();
+            $enrollmentStatus = $activeEnrollment ? 'enrolled' : 'not enrolled';
+            
             $result = [
                 'id'                  => $student->id,
-                'student_id'          => $student->student_id,
                 'name'                => $student->full_name ?: $student->user?->name,
-                'institution'         => $student->institution ? $student->institution->name : null,
+                'enrollment_status'   => $enrollmentStatus,
+                'institution'         => ($activeEnrollment && $showInstitution && $activeEnrollment->institution) ? $activeEnrollment->institution->name : null,
                 'has_active_request'  => $hasActiveAccess,
                 'has_pending_request' => $hasPendingRequest,
             ];
@@ -247,7 +248,7 @@ class AccessRequestController extends Controller
     public function showStudentProfile(Request $request, $studentId)
     {
         try {
-            $student = Student::with('user', 'institution')->find($studentId);
+            $student = Student::with('user', 'activeEnrollments.institution')->find($studentId);
 
             if (!$student || !$student->user || !$student->user->is_approved) {
                 return response()->json(['success' => false, 'message' => 'Student not found.'], 404);
@@ -284,12 +285,14 @@ class AccessRequestController extends Controller
                     ->exists()
                 : false;
 
+            $activeEnrollment = $student->activeEnrollments->first();
+
             $profile = [
                 'id'                  => $student->id,
-                'student_id'          => $student->student_id,
+                'student_id'          => null,
                 'name'                => $student->full_name ?: $student->user?->name,
-                'institution'         => $showInstitution && $student->institution
-                    ? $student->institution->name
+                'institution'         => ($showInstitution && $activeEnrollment?->institution)
+                    ? $activeEnrollment->institution->name
                     : null,
                 'has_active_access'   => $hasActiveAccess,
                 'has_pending_request' => $hasPendingRequest,
@@ -327,9 +330,9 @@ class AccessRequestController extends Controller
                         'id' => $access->id,
                         'verifier_id' => $access->verifier_id,
                         'student_id' => $access->student_id,
-                        'student_name' => $access->student?->full_name ?: $access->student?->user?->name,
-                        'student_email' => $access->student?->user?->email,
-                        'student_identifier' => $access->student?->student_id,
+                        'student_name'       => $access->student?->full_name ?: $access->student?->user?->name,
+                        'student_email'      => $access->student?->user?->email,
+                        'student_identifier' => null,
                         'granted_at' => $access->granted_at,
                         'expires_at' => $access->expires_at,
                         'revoked_at' => $access->revoked_at,
@@ -339,8 +342,9 @@ class AccessRequestController extends Controller
                                 'id' => $certificate->id,
                                 'serial' => $certificate->serial,
                                 'certificate_name' => $certificate->certificate_name,
-                                'degree_title' => $certificate->degree_title,
-                                'program_name' => $certificate->program_name,
+                                'certificate_level' => $certificate->certificate_level,
+                                // HIGH-15 (GROUP 3): Renamed key 'program_name' → 'program' for consistent API response
+                                'program' => $certificate->department . ($certificate->major ? ' — ' . $certificate->major : ''),
                                 'issue_date' => $certificate->issue_date,
                                 'revoked_at' => $certificate->revoked_at,
                                 'is_public' => $certificate->is_publicly_shareable,

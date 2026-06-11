@@ -37,6 +37,10 @@ class LoginController extends Controller
             return response()->json(['error' => 'Account pending admin approval. You\'ll be notified by email.'], 403);
         }
 
+        if (!is_null($user->suspended_at)) {
+            return response()->json(['error' => 'Your account has been suspended. Reason: ' . $user->suspension_reason . '. Please contact support.'], 403);
+        }
+
         $user->tokens()->delete();
         $token = $user->createToken('auth-token')->plainTextToken;
 

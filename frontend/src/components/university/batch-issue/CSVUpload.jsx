@@ -22,7 +22,7 @@ export default function CSVUpload({ onFileAccepted, disabled }) {
   });
 
   const handleDownloadSample = () => {
-    const csvContent = "student_id,cgpa,degree_class,issue_date,convocation_date\n0112330154,3.75,First Class,2024-05-15,2024-06-20\n0112330155,3.50,Second Class,2024-05-15,2024-06-20\n";
+    const csvContent = "student_email,certificate_level_short_code,department_name,major_name,cgpa,degree_class,issue_date,convocation_date,authority_name,authority_title\nstudent@example.com,BSc,Computer Science,Software Engineering,3.75,First Class,15/05/2024,20/06/2024,Prof. Dr. Smith,Vice Chancellor\nstudent2@example.com,MSc,Mathematics,,3.90,First Class,15/05/2024,,Prof. Dr. Smith,Vice Chancellor\n";
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);

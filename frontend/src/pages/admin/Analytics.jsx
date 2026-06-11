@@ -6,6 +6,7 @@ import { Users, FileText, ShieldCheck, Activity, BarChart as BarChartIcon, LineC
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import api from '../../services/api';
 import Card from '../../components/shared/Card';
+import { formatDateTime } from '../../utils/helpers';
 
 const CustomTooltip = ({ active, payload, label }) => {
   if (active && payload && payload.length) {
@@ -144,7 +145,7 @@ export default function AnalyticsDashboard() {
                         <div>
                           <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{activity.action.replace(/_/g, ' ')}</p>
                           <p className="text-xs text-gray-500">
-                            by {activity.user} - <span className="italic">{new Date(activity.time).toLocaleString()}</span>
+                            by {activity.user} - <span className="italic">{formatDateTime(activity.time)}</span>
                           </p>
                         </div>
                       </div>
@@ -216,11 +217,11 @@ export default function AnalyticsDashboard() {
                     </thead>
                     <tbody>
                       {data.universityAnalytics.perUniversitySummary.map((inst, i) => (
-                        <tr key={i} className="border-b dark:border-gray-700">
-                          <td className="px-4 py-3 font-medium text-gray-900 dark:text-white">{inst.name}</td>
-                          <td className="px-4 py-3 text-right">{inst.enrolled}</td>
-                          <td className="px-4 py-3 text-right">{inst.issued}</td>
-                          <td className="px-4 py-3 text-right">{inst.graduation_rate}%</td>
+                        <tr key={i} className="h-12 border-b dark:border-gray-700">
+                          <td className="px-4 py-0 font-medium text-gray-900 dark:text-white">{inst.name}</td>
+                          <td className="px-4 py-0 text-right">{inst.enrolled}</td>
+                          <td className="px-4 py-0 text-right">{inst.issued}</td>
+                          <td className="px-4 py-0 text-right">{inst.graduation_rate}%</td>
                         </tr>
                       ))}
                       {data.universityAnalytics.perUniversitySummary.length === 0 && (
@@ -278,14 +279,14 @@ export default function AnalyticsDashboard() {
                       </thead>
                       <tbody>
                         {data.verifierAnalytics.mostVerifiedInstitutions.map((inst, i) => (
-                          <tr key={i} className="border-b dark:border-gray-700">
-                            <td className="px-4 py-3 font-medium text-gray-900 dark:text-white flex items-center gap-2">
+                          <tr key={i} className="h-12 border-b dark:border-gray-700">
+                            <td className="px-4 py-0 font-medium text-gray-900 dark:text-white flex items-center gap-2">
                               <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-primary-100 text-xs font-bold text-primary-700 dark:bg-primary-900/30 dark:text-primary-400">
                                 {i + 1}
                               </div>
                               {inst.name}
                             </td>
-                            <td className="px-4 py-3 text-right font-semibold">{inst.verifications_count}</td>
+                            <td className="px-4 py-0 text-right font-semibold">{inst.verifications_count}</td>
                           </tr>
                         ))}
                         {data.verifierAnalytics.mostVerifiedInstitutions.length === 0 && (

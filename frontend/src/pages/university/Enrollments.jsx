@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { AlertCircle, GraduationCap, Search, UserCheck, UserPlus, Users, RefreshCw, Calendar, Clock, LogOut, MessageSquare, Pencil, BookOpen, ChevronDown, ChevronUp, CalendarPlus, Check, XCircle, ArrowRightLeft, FileText, Info, Send } from 'lucide-react';
+import { AlertCircle, GraduationCap, Search, UserCheck, UserPlus, Users, RefreshCw, Calendar, Clock, LogOut, MessageSquare, Pencil, BookOpen, ChevronDown, ChevronUp, CalendarPlus, Check, XCircle, ArrowRightLeft, FileText, Info, Send, Eye, MoreVertical } from 'lucide-react';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import Card from '../../components/shared/Card';
 import StatCard from '../../components/shared/StatCard';
@@ -13,7 +13,9 @@ import ErrorMessage from '../../components/shared/ErrorMessage';
 import EmptyState from '../../components/shared/EmptyState';
 import ConfirmModal from '../../components/shared/ConfirmModal';
 import Modal from '../../components/shared/Modal';
-import api from '../../services/api';
+import SelectField from '../../components/shared/SelectField';
+import api, { cachedGet } from '../../services/api';
+import { generateBatchOptions } from '../../utils/helpers';
 
 const statusVariants = {
   active: 'success',
@@ -40,6 +42,18 @@ function getEnrollmentSummary(enrollment) {
   return parts.length > 0 ? parts.join(' • ') : 'No program details yet';
 }
 
+function computeProgramDisplay(enrollment) {
+  const level = enrollment.certificate_level_name;
+  const dept = enrollment.department_name;
+  const major = enrollment.major_name;
+
+  if (!level && !dept) return enrollment.program || 'N/A';
+
+  let display = [level, dept].filter(Boolean).join(' — ');
+  if (major) display += ` (${major})`;
+  return display;
+}
+
 export default function Enrollments() {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -51,6 +65,33 @@ export default function Enrollments() {
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
+  const [certificateLevels, setCertificateLevels] = useState([]);
+  const [certLevelFilter, setCertLevelFilter] = useState('');
+  const [departments, setDepartments] = useState([]);
+  const [departmentFilter, setDepartmentFilter] = useState('');
+  const [majorFilter, setMajorFilter] = useState('');
+
+  // Auto-open enroll modal from dashboard link
+  useEffect(() => {
+    if (searchParams.get('action') === 'enroll') {
+      setShowEnrollModal(true);
+      setSearchParams(prev => {
+        const next = new URLSearchParams(prev);
+        next.delete('action');
+        return next;
+      }, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
+
+  useEffect(() => {
+    cachedGet('/university/departments').then(({ data }) => {
+      setDepartments(data.departments?.filter(d => d.is_active) || []);
+    }).catch(console.error);
+    
+    cachedGet('/university/certificate-levels').then(({ data }) => {
+      setCertificateLevels(data.certificate_levels?.filter(cl => cl.is_active) || []);
+    }).catch(console.error);
+  }, []);
 
 
   // Sync filter state from URL parameter if it exists
@@ -72,6 +113,7 @@ export default function Enrollments() {
   const [pagination, setPagination] = useState({ current_page: 1, last_page: 1, total: 0 });
   const [stats, setStats] = useState({ total: 0, active: 0, graduated: 0 });
   const [showEnrollModal, setShowEnrollModal] = useState(false);
+  const [enrollApplicationData, setEnrollApplicationData] = useState(null);
   const [extendingEnrollment, setExtendingEnrollment] = useState(null);
   const [suspendingEnrollment, setSuspendingEnrollment] = useState(null);
   const [editingEnrollment, setEditingEnrollment] = useState(null);
@@ -98,7 +140,7 @@ export default function Enrollments() {
     const fetchApplicationCount = async () => {
       try {
         const { data } = await api.get('/university/enrollment-applications');
-        const pending = (data.applications || []).filter(a => a.status === 'pending' || a.status === 'more_info_requested').length;
+        const pending = (data.applications || []).filter(a => a.status === 'pending').length;
         setPendingApplications(pending);
       } catch (e) {}
     };
@@ -111,10 +153,19 @@ export default function Enrollments() {
     window.addEventListener('withdrawal_requests_updated', handleUpdate);
     window.addEventListener('extension_requests_updated', handleUpdate);
     window.addEventListener('enrollment_applications_updated', handleUpdate);
+
+    const handleOpenEnrollModal = (e) => {
+      setEnrollApplicationData(e.detail);
+      setSearchParams({ tab: 'enrollments' });
+      setShowEnrollModal(true);
+    };
+    window.addEventListener('open_enroll_modal', handleOpenEnrollModal);
+
     return () => {
       window.removeEventListener('withdrawal_requests_updated', handleUpdate);
       window.removeEventListener('extension_requests_updated', handleUpdate);
       window.removeEventListener('enrollment_applications_updated', handleUpdate);
+      window.removeEventListener('open_enroll_modal', handleOpenEnrollModal);
     };
   }, []);
 
@@ -126,7 +177,7 @@ export default function Enrollments() {
 
     try {
       const { data } = await api.get('/university/enrollments', {
-        params: { status: filter, search, page },
+        params: { status: filter, search, page, certificate_level_id: certLevelFilter, department_id: departmentFilter },
       });
       setEnrollments(data.enrollments || []);
       if (data.pagination) setPagination(data.pagination);
@@ -137,11 +188,12 @@ export default function Enrollments() {
     } finally {
       setLoading(false);
     }
-  }, [filter, search, page]);
+  }, [filter, search, page, certLevelFilter, departmentFilter]);
 
   useEffect(() => {
     setPage(1);
-  }, [filter, search]);
+    setMajorFilter(''); // Reset major filter when search or filters change
+  }, [filter, search, certLevelFilter, departmentFilter]);
 
   useEffect(() => {
     const timeout = setTimeout(() => {
@@ -280,198 +332,347 @@ export default function Enrollments() {
         {activeTab === 'enrollments' && (
           <>
             <Card className="space-y-4">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Filter enrollments</h2>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Use the search box or status chips to narrow the list.</p>
-            </div>
-
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={fetchEnrollments} loading={loading} className="!p-2">
-                <RefreshCw className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-
-          <div className="grid gap-3 lg:grid-cols-[1fr_auto] lg:items-center">
-            <div className="relative">
-              <Input
-                type="text"
-                placeholder="Search by name, student ID, email, or enrollment number"
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                className="pr-11"
-              />
-              <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              {['all', 'active', 'graduated', 'suspended', 'withdrawn'].map((status) => (
-                <Button
-                  key={status}
-                  type="button"
-                  variant={filter === status ? 'primary' : 'secondary'}
-                  onClick={() => handleFilterChange(status)}
-                  className="capitalize"
-                >
-                  {status}
-                </Button>
-              ))}
-            </div>
-          </div>
-
-          {error ? (
-            <div className="flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900/30 dark:bg-red-900/20 dark:text-red-300">
-              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-              <span>{error}</span>
-            </div>
-          ) : null}
-        </Card>
-
-        {loading ? (
-          <Card>
-            <div className="flex min-h-64 items-center justify-center">
-              <LoadingSpinner />
-            </div>
-          </Card>
-        ) : error ? (
-          <ErrorMessage message={error} retry={fetchEnrollments} />
-        ) : enrollments.length === 0 ? (
-          <EmptyState
-            title="No enrollments found"
-            message="Enroll your first student or clear the filters to view the full enrollment list."
-            icon={Users}
-            action={
-              <Button onClick={() => setShowEnrollModal(true)}>
-                <UserPlus className="mr-2 h-4 w-4" />
-                Enroll Student
-              </Button>
-            }
-          />
-        ) : (
-          <>
-            <div className="grid gap-4">
-            {enrollments.map((enrollment) => (
-              <Card key={enrollment.id} className="space-y-5 border border-transparent transition hover:border-primary-200 hover:shadow-xl dark:hover:border-primary-900/40">
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                  <div className="flex-1">
-                    <div className="flex flex-wrap items-center gap-3">
-                      <div className="rounded-2xl bg-primary-50 p-3 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300">
-                        <GraduationCap className="h-6 w-6" />
-                      </div>
-                      <div>
-                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{getFullName(enrollment)}</h3>
-                        <p className="text-sm text-gray-500 dark:text-gray-400">
-                          {enrollment.student_email || enrollment.email || 'No email'} • Student ID: {enrollment.student_id}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-[1.2fr_2.5fr_1fr_1fr]">
-                      <div>
-                        <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Enrollment #</p>
-                        <p className="mt-1 font-medium text-gray-900 dark:text-white">{enrollment.enrollment_number}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Program</p>
-                        <p className="mt-1 font-medium text-gray-900 dark:text-white">{enrollment.program || 'N/A'}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Batch</p>
-                        <p className="mt-1 font-medium text-gray-900 dark:text-white">{enrollment.batch || 'N/A'}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Enrolled</p>
-                        <p className="mt-1 font-medium text-gray-900 dark:text-white">{formatDate(enrollment.enrollment_date)}</p>
-                      </div>
-                    </div>
-
-                    <div className="mt-4 flex flex-wrap gap-3 text-sm text-gray-500 dark:text-gray-400">
-                      <span>{getEnrollmentSummary(enrollment)}</span>
-                      <span>Expected graduation: {formatDate(enrollment.expected_graduation)}</span>
-                      {enrollment.actual_graduation ? <span>Graduated on: {formatDate(enrollment.actual_graduation)}</span> : null}
-                    </div>
-                  </div>
-
-                  <Badge variant={statusVariants[enrollment.status] || 'default'}>{String(enrollment.status || 'unknown').toUpperCase()}</Badge>
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between border-b border-gray-100 pb-4 dark:border-gray-800">
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Filter enrollments</h2>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Search and filter the list of students.</p>
                 </div>
-
-                <div className="flex flex-wrap gap-3 border-t border-gray-200 pt-4 dark:border-gray-700">
-                  <Button 
-                    variant="secondary" 
-                    type="button" 
-                    onClick={() => setEditingEnrollment(enrollment)}
-                    disabled={['graduated', 'withdrawn'].includes(enrollment.status)}
-                    title={['graduated', 'withdrawn'].includes(enrollment.status) ? "Cannot edit graduated or withdrawn enrollments" : ""}
-                  >
-                    <Pencil className="mr-2 h-4 w-4" />
-                    Edit
-                  </Button>
-                  {enrollment.status === 'active' ? (
-                    <>
-                      <Button variant="success" type="button" onClick={() => requestUpdateStatus(enrollment.id, 'graduated')}>
-                        <UserCheck className="mr-2 h-4 w-4" />
-                        Mark Graduated
-                      </Button>
-                      <Button variant="secondary" type="button" onClick={() => setExtendingEnrollment(enrollment)}>
-                        <Calendar className="mr-2 h-4 w-4" />
-                        Extend Graduation Date
-                      </Button>
-                      <Button variant="secondary" type="button" onClick={() => setSuspendingEnrollment(enrollment)}>
-                        <AlertCircle className="mr-2 h-4 w-4" />
-                        Suspend
-                      </Button>
-                    </>
-                  ) : null}
-
-                  {enrollment.status === 'withdrawal_requested' ? (
-                    <>
-                      <Button variant="danger" type="button" onClick={() => requestUpdateStatus(enrollment.id, 'withdrawn')}>
-                        <UserCheck className="mr-2 h-4 w-4" />
-                        Approve Withdrawal
-                      </Button>
-                      <Button variant="secondary" type="button" onClick={() => requestUpdateStatus(enrollment.id, 'active')}>
-                        <AlertCircle className="mr-2 h-4 w-4" />
-                        Reject Withdrawal
-                      </Button>
-                    </>
-                  ) : null}
-
-                  {enrollment.status === 'suspended' ? (
-                    <Button variant="success" type="button" onClick={() => requestUpdateStatus(enrollment.id, 'active')}>
-                      <UserCheck className="mr-2 h-4 w-4" />
-                      Reactivate
-                    </Button>
-                  ) : null}
-                </div>
-              </Card>
-            ))}
-            </div>
-            {pagination.last_page > 1 && (
-              <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-gray-200 pt-6 dark:border-gray-700">
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  Showing <span className="font-medium">{(pagination.current_page - 1) * 15 + 1}</span> to <span className="font-medium">{Math.min(pagination.current_page * 15, pagination.total)}</span> of <span className="font-medium">{pagination.total}</span> results
-                </p>
                 <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    onClick={() => setPage((p) => Math.max(1, p - 1))}
-                    disabled={pagination.current_page === 1}
-                  >
-                    Previous
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => setPage((p) => Math.min(pagination.last_page, p + 1))}
-                    disabled={pagination.current_page === pagination.last_page}
-                  >
-                    Next
+                  <Button variant="outline" onClick={fetchEnrollments} loading={loading} className="!p-2">
+                    <RefreshCw className="h-4 w-4" />
                   </Button>
                 </div>
               </div>
+
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 lg:items-center pt-2">
+                <div className="relative md:col-span-2 lg:col-span-2">
+                  <Input
+                    type="text"
+                    placeholder="Search by name, student ID, email..."
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                    icon={<Search className="h-4 w-4" />}
+                  />
+                </div>
+
+                <div className="md:col-span-1 lg:col-span-1">
+                  <SelectField
+                    value={filter}
+                    onChange={(value) => handleFilterChange(value)}
+                    options={[
+                      { value: 'all', label: 'All Statuses' },
+                      { value: 'active', label: 'Active' },
+                      { value: 'graduated', label: 'Graduated' },
+                      { value: 'suspended', label: 'Suspended' },
+                      { value: 'withdrawn', label: 'Withdrawn' },
+                    ]}
+                  />
+                </div>
+
+                <div className="md:col-span-1 lg:col-span-1">
+                  <SelectField
+                    value={certLevelFilter}
+                    onChange={(value) => {
+                      setCertLevelFilter(value);
+                      setDepartmentFilter('');
+                    }}
+                    options={[
+                      { value: '', label: 'All Cert Levels' },
+                      ...certificateLevels.map(cl => ({ value: cl.id, label: cl.name }))
+                    ]}
+                  />
+                </div>
+
+                <div className="md:col-span-1 lg:col-span-1">
+                  <SelectField
+                    value={departmentFilter}
+                    onChange={(value) => setDepartmentFilter(value)}
+                    options={[
+                      { value: '', label: 'All Departments' },
+                      ...departments
+                        .filter(d => !certLevelFilter || String(d.certificate_level_id) === String(certLevelFilter) || !d.certificate_level_id)
+                        .map(d => ({ value: d.id, label: d.name }))
+                    ]}
+                  />
+                </div>
+
+                <div className="md:col-span-1 lg:col-span-1">
+                  <SelectField
+                    value={majorFilter}
+                    onChange={(value) => setMajorFilter(value)}
+                    options={[
+                      { value: '', label: 'All Majors' },
+                      ...Array.from(
+                        new Map(
+                          enrollments
+                            .filter(e => e.major_id && e.major_name)
+                            .map(e => [e.major_id, { value: e.major_id, label: e.major_name }])
+                        ).values()
+                      )
+                    ]}
+                  />
+                </div>
+              </div>
+
+              {error ? (
+                <div className="flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900/30 dark:bg-red-900/20 dark:text-red-300 mt-4">
+                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                  <span>{error}</span>
+                </div>
+              ) : null}
+            </Card>
+
+            {loading ? (
+              <Card>
+                <div className="flex min-h-64 items-center justify-center">
+                  <LoadingSpinner />
+                </div>
+              </Card>
+            ) : error ? (
+              <ErrorMessage message={error} retry={fetchEnrollments} />
+            ) : enrollments.length === 0 ? (
+              <EmptyState
+                title="No enrollments found"
+                message="Enroll your first student or clear the filters to view the full enrollment list."
+                icon={Users}
+                action={
+                  <Button onClick={() => setShowEnrollModal(true)}>
+                    <UserPlus className="mr-2 h-4 w-4" />
+                    Enroll Student
+                  </Button>
+                }
+              />
+            ) : (
+              <>
+                {/* Desktop Table */}
+                <div className="hidden md:block overflow-x-auto min-h-[320px] rounded-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900 shadow-sm">
+                  <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-800">
+                    <thead className="bg-gray-50 dark:bg-gray-800/50">
+                      <tr>
+                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider dark:text-gray-400">Student Name</th>
+                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider dark:text-gray-400">Student ID</th>
+                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider dark:text-gray-400">Program</th>
+                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider dark:text-gray-400">Batch</th>
+                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider dark:text-gray-400">Status</th>
+                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider dark:text-gray-400">Enrolled Date</th>
+                        <th className="px-6 py-4 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider dark:text-gray-400">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
+                      {enrollments.filter(e => !majorFilter || String(e.major_id) === String(majorFilter)).map((enrollment) => (
+                        <tr key={enrollment.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition group/row">
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="font-medium text-gray-900 dark:text-white">{getFullName(enrollment)}</div>
+                            <div className="text-xs text-gray-500">{enrollment.student_email || enrollment.email || 'No email'}</div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{enrollment.student_id}</td>
+                          <td className="px-6 py-4">
+                            <div className="text-sm font-medium text-gray-900 dark:text-white truncate max-w-[200px]" title={enrollment.certificate_level_name || 'N/A'}>
+                              {enrollment.certificate_level_name || 'N/A'}
+                            </div>
+                            <div className="text-xs text-gray-500 truncate max-w-[200px]" title={`${enrollment.department_name || ''} ${enrollment.major_name ? `(${enrollment.major_name})` : ''}`.trim() || enrollment.program}>
+                              {`${enrollment.department_name || ''} ${enrollment.major_name ? `(${enrollment.major_name})` : ''}`.trim() || enrollment.program || 'N/A'}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{enrollment.batch || 'N/A'}</td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <Badge variant={statusVariants[enrollment.status] || 'default'}>{String(enrollment.status || 'unknown').toUpperCase()}</Badge>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{formatDate(enrollment.enrollment_date)}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                            <div className="relative inline-block text-left group">
+                              <button type="button" className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800">
+                                <MoreVertical className="h-5 w-5" />
+                              </button>
+                              <div className="absolute right-0 mt-1 hidden w-48 origin-top-right flex-col rounded-md bg-white py-1 shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none group-hover:flex dark:bg-gray-800 dark:ring-gray-700 z-50">
+                                <button
+                                  className="flex w-full items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-50 dark:text-gray-300 dark:hover:bg-gray-700 dark:hover:text-white"
+                                  onClick={() => setEditingEnrollment(enrollment)}
+                                  disabled={['graduated', 'withdrawn'].includes(enrollment.status)}
+                                >
+                                  <Pencil className="mr-2 h-4 w-4" /> Edit
+                                </button>
+
+                                {enrollment.status === 'active' && (
+                                  <>
+                                    <button
+                                      className="flex w-full items-center px-4 py-2 text-sm text-green-600 hover:bg-green-50 dark:text-green-400 dark:hover:bg-green-900/20"
+                                      onClick={() => requestUpdateStatus(enrollment.id, 'graduated')}
+                                    >
+                                      <UserCheck className="mr-2 h-4 w-4" /> Mark Graduated
+                                    </button>
+                                    <button
+                                      className="flex w-full items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700 dark:hover:text-white"
+                                      onClick={() => setExtendingEnrollment(enrollment)}
+                                    >
+                                      <Calendar className="mr-2 h-4 w-4" /> Extend
+                                    </button>
+                                    <button
+                                      className="flex w-full items-center px-4 py-2 text-sm text-amber-600 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-900/20"
+                                      onClick={() => setSuspendingEnrollment(enrollment)}
+                                    >
+                                      <AlertCircle className="mr-2 h-4 w-4" /> Suspend
+                                    </button>
+                                  </>
+                                )}
+
+                                {enrollment.status === 'withdrawal_requested' && (
+                                  <>
+                                    <button
+                                      className="flex w-full items-center px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20"
+                                      onClick={() => requestUpdateStatus(enrollment.id, 'withdrawn')}
+                                    >
+                                      <UserCheck className="mr-2 h-4 w-4" /> Approve Withdrawal
+                                    </button>
+                                    <button
+                                      className="flex w-full items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700 dark:hover:text-white"
+                                      onClick={() => requestUpdateStatus(enrollment.id, 'active')}
+                                    >
+                                      <XCircle className="mr-2 h-4 w-4" /> Reject Withdrawal
+                                    </button>
+                                  </>
+                                )}
+
+                                {enrollment.status === 'suspended' && (
+                                  <button
+                                    className="flex w-full items-center px-4 py-2 text-sm text-green-600 hover:bg-green-50 dark:text-green-400 dark:hover:bg-green-900/20"
+                                    onClick={() => requestUpdateStatus(enrollment.id, 'active')}
+                                  >
+                                    <UserCheck className="mr-2 h-4 w-4" /> Reactivate
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Mobile Cards */}
+                <div className="grid gap-4 md:hidden">
+                {enrollments.map((enrollment) => (
+                  <Card key={enrollment.id} className="space-y-5 border border-transparent transition hover:border-primary-200 hover:shadow-xl dark:hover:border-primary-900/40">
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="flex-1">
+                        <div className="flex flex-wrap items-center gap-3">
+                          <div className="rounded-2xl bg-primary-50 p-3 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300">
+                            <GraduationCap className="h-6 w-6" />
+                          </div>
+                          <div>
+                            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{getFullName(enrollment)}</h3>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">
+                              {enrollment.student_email || enrollment.email || 'No email'} • Student ID: {enrollment.student_id}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-[1.2fr_2.5fr_1fr_1fr]">
+                          <div>
+                            <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Enrollment #</p>
+                            <p className="mt-1 font-medium text-gray-900 dark:text-white">{enrollment.enrollment_number}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Program</p>
+                            <p className="mt-1 font-medium text-gray-900 dark:text-white">{computeProgramDisplay(enrollment)}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Batch</p>
+                            <p className="mt-1 font-medium text-gray-900 dark:text-white">{enrollment.batch || 'N/A'}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Enrolled</p>
+                            <p className="mt-1 font-medium text-gray-900 dark:text-white">{formatDate(enrollment.enrollment_date)}</p>
+                          </div>
+                        </div>
+
+                        <div className="mt-4 flex flex-wrap gap-3 text-sm text-gray-500 dark:text-gray-400">
+                          <span>{getEnrollmentSummary(enrollment)}</span>
+                          <span>Expected graduation: {formatDate(enrollment.expected_graduation)}</span>
+                          {enrollment.actual_graduation ? <span>Graduated on: {formatDate(enrollment.actual_graduation)}</span> : null}
+                        </div>
+                      </div>
+
+                      <Badge variant={statusVariants[enrollment.status] || 'default'}>{String(enrollment.status || 'unknown').toUpperCase()}</Badge>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2 border-t border-gray-200 pt-4 dark:border-gray-700">
+                      <Button 
+                        variant="secondary" 
+                        size="sm"
+                        type="button" 
+                        onClick={() => setEditingEnrollment(enrollment)}
+                        disabled={['graduated', 'withdrawn'].includes(enrollment.status)}
+                      >
+                        <Pencil className="mr-1.5 h-3.5 w-3.5" />
+                        Edit
+                      </Button>
+                      {enrollment.status === 'active' ? (
+                        <>
+                          <Button variant="success" size="sm" type="button" onClick={() => requestUpdateStatus(enrollment.id, 'graduated')}>
+                            <UserCheck className="mr-1.5 h-3.5 w-3.5" />
+                            Mark Graduated
+                          </Button>
+                          <Button variant="secondary" size="sm" type="button" onClick={() => setExtendingEnrollment(enrollment)}>
+                            <Calendar className="mr-1.5 h-3.5 w-3.5" />
+                            Extend
+                          </Button>
+                          <Button variant="secondary" size="sm" type="button" onClick={() => setSuspendingEnrollment(enrollment)}>
+                            <AlertCircle className="mr-1.5 h-3.5 w-3.5" />
+                            Suspend
+                          </Button>
+                        </>
+                      ) : null}
+
+                      {enrollment.status === 'withdrawal_requested' ? (
+                        <>
+                          <Button variant="danger" size="sm" type="button" onClick={() => requestUpdateStatus(enrollment.id, 'withdrawn')}>
+                            <UserCheck className="mr-1.5 h-3.5 w-3.5" />
+                            Approve
+                          </Button>
+                          <Button variant="secondary" size="sm" type="button" onClick={() => requestUpdateStatus(enrollment.id, 'active')}>
+                            <AlertCircle className="mr-1.5 h-3.5 w-3.5" />
+                            Reject
+                          </Button>
+                        </>
+                      ) : null}
+
+                      {enrollment.status === 'suspended' ? (
+                        <Button variant="success" size="sm" type="button" onClick={() => requestUpdateStatus(enrollment.id, 'active')}>
+                          <UserCheck className="mr-1.5 h-3.5 w-3.5" />
+                          Reactivate
+                        </Button>
+                      ) : null}
+                    </div>
+                  </Card>
+                ))}
+                </div>
+                {pagination.last_page > 1 && (
+                  <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-gray-200 pt-6 dark:border-gray-700">
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      Showing <span className="font-medium">{(pagination.current_page - 1) * 15 + 1}</span> to <span className="font-medium">{Math.min(pagination.current_page * 15, pagination.total)}</span> of <span className="font-medium">{pagination.total}</span> results
+                    </p>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        onClick={() => setPage((p) => Math.max(1, p - 1))}
+                        disabled={pagination.current_page === 1}
+                      >
+                        Previous
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => setPage((p) => Math.min(pagination.last_page, p + 1))}
+                        disabled={pagination.current_page === pagination.last_page}
+                      >
+                        Next
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
-          </>
-        )}
           </>
         )}
 
@@ -486,12 +687,15 @@ export default function Enrollments() {
         {showEnrollModal ? (
           <EnrollStudentModal
             open={showEnrollModal}
-            onClose={() => setShowEnrollModal(false)}
+            application={enrollApplicationData}
+            onClose={() => { setShowEnrollModal(false); setEnrollApplicationData(null); }}
             onSuccess={() => {
               setShowEnrollModal(false);
+              setEnrollApplicationData(null);
               setSearch('');
               handleFilterChange('all');
               fetchEnrollments();
+              window.dispatchEvent(new Event('enrollment_applications_updated'));
             }}
           />
         ) : null}
@@ -543,63 +747,111 @@ export default function Enrollments() {
   );
 }
 
-function EnrollStudentModal({ open, onClose, onSuccess }) {
-  const [step, setStep] = useState(1);
+function EnrollStudentModal({ open, onClose, onSuccess, application }) {
+  const [step, setStep] = useState(application ? 2 : 1);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [searching, setSearching] = useState(false);
   const [formSubmitting, setFormSubmitting] = useState(false);
   const [enrollError, setEnrollError] = useState(null);
-  const [selectedStudent, setSelectedStudent] = useState(null);
+  const [selectedStudent, setSelectedStudent] = useState(application ? { name: application.student_name, email: application.student_email } : null);
   const [formData, setFormData] = useState({
-    student_email: '',
-    student_id: '',
-    program_level: '',
-    department_id: '',
-    batch: '',
+    student_email: application ? application.student_email : '',
+    roll_number: '',
+    certificate_level_id: application ? application.certificate_level_id : '',
+    department_id: application ? application.department_id : '',
+    major_id: '',
+    batch: application ? application.batch : '',
     enrollment_date: new Date().toISOString().split('T')[0],
     expected_graduation_date: '',
   });
 
-  const [departments, setDepartments] = useState([]);
   useEffect(() => {
-    api.get('/university/departments').then(({ data }) => {
+    if (application) {
+      setStep(2);
+      setSelectedStudent({ name: application.student_name, email: application.student_email });
+      setFormData(f => ({
+        ...f,
+        student_email: application.student_email,
+        certificate_level_id: application.certificate_level_id || '',
+        department_id: application.department_id || '',
+        batch: application.batch || '',
+      }));
+    }
+  }, [application]);
+
+  const [departments, setDepartments] = useState([]);
+  const [certificateLevels, setCertificateLevels] = useState([]);
+  const [certLevelsLoading, setCertLevelsLoading] = useState(true);
+  const [certLevelsError, setCertLevelsError] = useState(null);
+  const [majors, setMajors] = useState([]);
+  const [majorsLoading, setMajorsLoading] = useState(false);
+
+  useEffect(() => {
+    // Fetch departments
+    cachedGet('/university/departments').then(({ data }) => {
       setDepartments(data.departments?.filter(d => d.is_active) || []);
     }).catch(console.error);
+
+    // Fetch certificate levels from API
+    setCertLevelsLoading(true);
+    setCertLevelsError(null);
+    cachedGet('/university/certificate-levels')
+      .then(({ data }) => {
+        const active = (data.certificate_levels || data.levels || []).filter(l => l.is_active !== false);
+        setCertificateLevels(active);
+      })
+      .catch(() => {
+        setCertLevelsError('Could not load certificate levels. Please refresh.');
+      })
+      .finally(() => setCertLevelsLoading(false));
   }, []);
 
-  const calculateGraduationDate = (level, enrollDateStr) => {
-    if (!level || !enrollDateStr) return '';
-    const date = new Date(enrollDateStr);
-    if (isNaN(date.getTime())) return '';
-
-    if (level === 'Bachelors') {
-      date.setFullYear(date.getFullYear() + 4);
-    } else if (level === 'Masters') {
-      date.setFullYear(date.getFullYear() + 2);
-    } else if (level === 'PhD') {
-      date.setFullYear(date.getFullYear() + 3);
+  // Load majors when department changes
+  useEffect(() => {
+    if (!formData.department_id) {
+      setMajors([]);
+      setFormData(c => ({ ...c, major_id: '' }));
+      return;
     }
-    return date.toISOString().split('T')[0];
-  };
+    setMajorsLoading(true);
+    cachedGet('/university/majors', { params: { department_id: formData.department_id } })
+      .then(({ data }) => {
+        const active = (data.majors || []).filter(m => m.is_active !== false);
+        setMajors(active);
+      })
+      .catch(() => setMajors([]))
+      .finally(() => setMajorsLoading(false));
+    // Reset major when department changes
+    setFormData(c => ({ ...c, major_id: '' }));
+  }, [formData.department_id]);
 
-  const handleProgramLevelChange = (level) => {
-    const newExpectedGraduation = calculateGraduationDate(level, formData.enrollment_date);
-    setFormData(current => ({
-      ...current,
-      program_level: level,
-      expected_graduation_date: newExpectedGraduation || current.expected_graduation_date
-    }));
-  };
+  // Auto-calculate expected graduation date based on certificate level
+  useEffect(() => {
+    if (!formData.certificate_level_id || !formData.enrollment_date) return;
 
-  const handleEnrollmentDateChange = (dateStr) => {
-    const newExpectedGraduation = calculateGraduationDate(formData.program_level, dateStr);
-    setFormData(current => ({
-      ...current,
-      enrollment_date: dateStr,
-      expected_graduation_date: newExpectedGraduation || current.expected_graduation_date
-    }));
-  };
+    const level = certificateLevels.find(l => String(l.id) === String(formData.certificate_level_id));
+    if (!level) return;
+
+    const name = (level.name || '').toLowerCase();
+    let years = 4; // default
+    if (name.includes('master')) years = 2;
+    else if (name.includes('bachelor')) years = 4;
+    else if (name.includes('phd') || name.includes('doctor')) years = 4;
+    else if (name.includes('diploma')) years = 2;
+    else if (name.includes('certificate')) years = 1;
+
+    const enrollDate = new Date(formData.enrollment_date);
+    if (!isNaN(enrollDate.getTime())) {
+      enrollDate.setFullYear(enrollDate.getFullYear() + years);
+      const calculatedDate = enrollDate.toISOString().split('T')[0];
+      
+      setFormData(current => {
+        if (current.expected_graduation_date === calculatedDate) return current;
+        return { ...current, expected_graduation_date: calculatedDate };
+      });
+    }
+  }, [formData.certificate_level_id, formData.enrollment_date, certificateLevels]);
 
   const searchStudents = async () => {
     if (searchQuery.trim().length < 2) {
@@ -625,7 +877,7 @@ function EnrollStudentModal({ open, onClose, onSuccess }) {
     setFormData((current) => ({
       ...current,
       student_email: student.email,
-      student_id: student.student_id || '',
+      roll_number: '',
     }));
     setEnrollError(null);
     setStep(2);
@@ -633,6 +885,11 @@ function EnrollStudentModal({ open, onClose, onSuccess }) {
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+
+    if (!formData.certificate_level_id) {
+      toast.error('Please select a certificate level');
+      return;
+    }
 
     if (formData.expected_graduation_date && new Date(formData.expected_graduation_date) <= new Date(formData.enrollment_date)) {
       toast.error('Expected graduation date must be after enrollment date');
@@ -644,11 +901,16 @@ function EnrollStudentModal({ open, onClose, onSuccess }) {
 
     try {
       const payload = {
-        ...formData,
+        student_email: formData.student_email,
+        certificate_level_id: Number(formData.certificate_level_id),
+        department_id: Number(formData.department_id),
+        batch: formData.batch,
+        enrollment_date: formData.enrollment_date,
+        expected_graduation_date: formData.expected_graduation_date || undefined,
       };
-      if (formData.department_id) {
-        payload.department_id = Number(formData.department_id);
-      }
+      if (formData.roll_number) payload.roll_number = formData.roll_number;
+      if (formData.major_id) payload.major_id = Number(formData.major_id);
+
       await api.post('/university/enrollments', payload);
       toast.success('Student enrolled successfully');
       onSuccess();
@@ -690,7 +952,7 @@ function EnrollStudentModal({ open, onClose, onSuccess }) {
           <div className="flex flex-col gap-3 sm:flex-row">
             <Input
               type="text"
-              placeholder="Search by name, email, or student ID"
+              placeholder="Search by name, email, or NID"
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
               onKeyDown={(event) => {
@@ -714,15 +976,34 @@ function EnrollStudentModal({ open, onClose, onSuccess }) {
                 type="button"
                 key={student.id}
                 onClick={() => selectStudent(student)}
-                className="flex w-full items-center justify-between rounded-2xl border border-gray-200 bg-white p-4 text-left transition hover:border-primary-300 hover:bg-primary-50/60 dark:border-gray-700 dark:bg-gray-900/40 dark:hover:border-primary-700 dark:hover:bg-primary-900/20"
+                disabled={student.is_enrolled_anywhere}
+                className={`flex w-full items-center justify-between rounded-2xl border p-4 text-left transition ${
+                  student.is_enrolled_anywhere
+                    ? 'border-gray-200 bg-gray-50 opacity-60 cursor-not-allowed dark:border-gray-800 dark:bg-gray-800/30'
+                    : 'border-gray-200 bg-white hover:border-primary-300 hover:bg-primary-50/60 dark:border-gray-700 dark:bg-gray-900/40 dark:hover:border-primary-700 dark:hover:bg-primary-900/20'
+                }`}
               >
                 <div>
                   <p className="font-medium text-gray-900 dark:text-white">{student.name}</p>
                   <p className="text-sm text-gray-500 dark:text-gray-400">
-                    {student.email} • ID: {student.student_id}
+                    {student.email}
                   </p>
+                  {student.is_enrolled_anywhere && (
+                    <p className="mt-1 flex items-center gap-1 text-xs font-medium text-red-600 dark:text-red-400">
+                      <XCircle className="h-3 w-3" />
+                      Currently enrolled at {student.active_institution}
+                    </p>
+                  )}
+                  {!student.is_enrolled_anywhere && student.is_enrolled_here && (
+                    <p className="mt-1 flex items-center gap-1 text-xs font-medium text-amber-600 dark:text-amber-400">
+                      <Info className="h-3 w-3" />
+                      Has past records here
+                    </p>
+                  )}
                 </div>
-                <UserPlus className="h-5 w-5 text-primary-600 dark:text-primary-400" />
+                {!student.is_enrolled_anywhere && (
+                  <UserPlus className="h-5 w-5 text-primary-600 dark:text-primary-400" />
+                )}
               </button>
             )) : (
               <div className="rounded-2xl border border-dashed border-gray-300 p-6 text-center text-sm text-gray-500 dark:border-gray-700 dark:text-gray-400">
@@ -756,51 +1037,57 @@ function EnrollStudentModal({ open, onClose, onSuccess }) {
             </div>
           )}
 
+          {/* Student ID (roll_number) */}
           <div className="space-y-1">
             <Input
               label="Student ID"
               type="text"
               placeholder="e.g. UIU-2026-001234"
-              value={formData.student_id}
-              onChange={(event) => setFormData((current) => ({ ...current, student_id: event.target.value }))}
-              required
+              value={formData.roll_number}
+              onChange={(event) => setFormData((current) => ({ ...current, roll_number: event.target.value }))}
             />
-            {selectedStudent?.student_id && formData.student_id === selectedStudent.student_id && (
-              <p className="text-xs text-amber-600 dark:text-amber-400">
-                This student already has this ID. You can keep it or assign a new one for your institution.
-              </p>
-            )}
-            {!selectedStudent?.student_id && (
-              <p className="text-xs text-gray-500 dark:text-gray-400">
-                Assign a unique student ID for this student within your university.
-              </p>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              The ID your institution assigns to this student. This will appear on their certificate and cannot be changed after enrollment.
+            </p>
+          </div>
+
+          {/* Certificate Level — fetched from API */}
+          <div className="space-y-1">
+            <SelectField
+              label="Certificate Level"
+              value={formData.certificate_level_id}
+              onChange={(value) => setFormData((current) => ({ ...current, certificate_level_id: value, department_id: '', major_id: '' }))}
+              options={[
+                { value: '', label: certLevelsLoading ? 'Loading levels...' : certLevelsError ? certLevelsError : 'Select Certificate Level' },
+                ...certificateLevels.map(level => ({ value: level.id, label: level.name }))
+              ]}
+              required
+              disabled={certLevelsLoading}
+            />
+            {certLevelsError && (
+              <p className="text-xs text-red-500 dark:text-red-400">{certLevelsError}</p>
             )}
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
+            {/* Department */}
             <div className="space-y-1">
-              <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                Program Level <span className="text-red-500">*</span>
-              </label>
-              <select
-                value={formData.program_level}
-                onChange={(e) => handleProgramLevelChange(e.target.value)}
-                className="block w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:focus:border-primary-400 dark:focus:ring-primary-400"
+              <SelectField
+                label="Department"
+                value={formData.department_id}
+                onChange={(value) => setFormData((current) => ({ ...current, department_id: value, major_id: '' }))}
+                options={[
+                  { value: '', label: formData.certificate_level_id ? 'Select Department' : 'Select Certificate Level First' },
+                  ...departments
+                    .filter(d => !formData.certificate_level_id || String(d.certificate_level_id) === String(formData.certificate_level_id) || !d.certificate_level_id)
+                    .map(dept => ({ value: dept.id, label: dept.name }))
+                ]}
+                disabled={!formData.certificate_level_id}
                 required
-              >
-                <option value="">Select Level</option>
-                <option value="Bachelors">Bachelors</option>
-                <option value="Masters">Masters</option>
-                <option value="PhD">PhD</option>
-              </select>
-            </div>
-            <div className="space-y-1">
-              <div className="flex items-center justify-between mb-1">
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Department
-                </label>
+              />
+              <div className="flex justify-end">
                 <a
-                  href="/settings?tab=role_prefs"
+                  href="/university/settings?tab=departments"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-xs text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300"
@@ -808,33 +1095,49 @@ function EnrollStudentModal({ open, onClose, onSuccess }) {
                   Manage Departments
                 </a>
               </div>
-              <select
-                value={formData.department_id}
-                onChange={(e) => setFormData((current) => ({ ...current, department_id: e.target.value }))}
-                className="block w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:focus:border-primary-400 dark:focus:ring-primary-400"
-              >
-                <option value="">Select Department (Optional)</option>
-                {departments.map(dept => (
-                  <option key={dept.id} value={dept.id}>{dept.name}</option>
-                ))}
-              </select>
+            </div>
+
+            {/* Major — optional */}
+            <div className="space-y-1">
+              <SelectField
+                label="Major"
+                value={formData.major_id}
+                onChange={(value) => setFormData((current) => ({ ...current, major_id: value }))}
+                options={[
+                  { value: '', label: majorsLoading ? 'Loading majors...' : 'Select Major (Optional)' },
+                  ...majors.map(major => ({ value: major.id, label: major.name }))
+                ]}
+                disabled={!formData.department_id || majorsLoading}
+              />
+              <div className="flex justify-end">
+                <a
+                  href={`/university/settings?tab=majors${formData.department_id ? `&dept=${formData.department_id}` : ''}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300"
+                >
+                  Manage Majors
+                </a>
+              </div>
             </div>
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
-            <Input
+            <SelectField
               label="Batch"
-              type="text"
-              placeholder="e.g. Spring 2024"
               value={formData.batch}
-              onChange={(event) => setFormData((current) => ({ ...current, batch: event.target.value }))}
+              onChange={(val) => setFormData((current) => ({ ...current, batch: val }))}
+              options={[
+                { value: '', label: 'Select batch...' },
+                ...generateBatchOptions()
+              ]}
               required
             />
             <Input
               label="Enrollment Date"
               type="date"
               value={formData.enrollment_date}
-              onChange={(event) => handleEnrollmentDateChange(event.target.value)}
+              onChange={(event) => setFormData((current) => ({ ...current, enrollment_date: event.target.value }))}
               required
             />
           </div>
@@ -847,9 +1150,16 @@ function EnrollStudentModal({ open, onClose, onSuccess }) {
           />
 
           <div className="flex flex-col gap-3 pt-2 sm:flex-row">
-            <Button type="button" variant="secondary" onClick={() => setStep(1)} disabled={formSubmitting}>
-              Back
-            </Button>
+            {!application && (
+              <Button type="button" variant="secondary" onClick={() => setStep(1)} disabled={formSubmitting}>
+                Back
+              </Button>
+            )}
+            {application && (
+              <Button type="button" variant="secondary" onClick={onClose} disabled={formSubmitting}>
+                Cancel
+              </Button>
+            )}
             <Button type="submit" loading={formSubmitting} className="sm:flex-1">
               Enroll Student
             </Button>
@@ -1080,12 +1390,68 @@ function ExtendGraduationModal({ enrollment, onClose, onSuccess }) {
 
 function EditEnrollmentModal({ enrollment, onClose, onSuccess }) {
   const [formData, setFormData] = useState({
-    program: enrollment.program || '',
+    certificate_level_id: enrollment.certificate_level_id || '',
+    department_id: enrollment.department_id || '',
+    major_id: enrollment.major_id || '',
     batch: enrollment.batch || '',
-    expected_graduation_date: enrollment.expected_graduation ? enrollment.expected_graduation.split('T')[0] : '',
   });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+
+  const [departments, setDepartments] = useState([]);
+  const [certificateLevels, setCertificateLevels] = useState([]);
+  const [certLevelsLoading, setCertLevelsLoading] = useState(true);
+  const [certLevelsError, setCertLevelsError] = useState(null);
+  const [majors, setMajors] = useState([]);
+  const [majorsLoading, setMajorsLoading] = useState(false);
+
+  // Computed program display (read-only)
+  const currentCertLevel = certificateLevels.find(l => String(l.id) === String(formData.certificate_level_id));
+  const currentDept = departments.find(d => String(d.id) === String(formData.department_id));
+  const currentMajor = majors.find(m => String(m.id) === String(formData.major_id));
+  const programDisplay = (() => {
+    if (!currentCertLevel && !currentDept) return enrollment.program || 'N/A';
+    let p = [currentCertLevel?.name, currentDept?.name].filter(Boolean).join(' — ');
+    if (currentMajor) p += ` (${currentMajor.name})`;
+    return p;
+  })();
+
+  useEffect(() => {
+    // Fetch departments
+    cachedGet('/university/departments').then(({ data }) => {
+      setDepartments(data.departments?.filter(d => d.is_active) || []);
+    }).catch(console.error);
+
+    // Fetch certificate levels
+    setCertLevelsLoading(true);
+    cachedGet('/university/certificate-levels')
+      .then(({ data }) => {
+        const active = (data.certificate_levels || data.levels || []).filter(l => l.is_active !== false);
+        setCertificateLevels(active);
+      })
+      .catch(() => setCertLevelsError('Could not load certificate levels. Please refresh.'))
+      .finally(() => setCertLevelsLoading(false));
+  }, []);
+
+  // Load majors when department changes
+  useEffect(() => {
+    if (!formData.department_id) {
+      setMajors([]);
+      return;
+    }
+    setMajorsLoading(true);
+    cachedGet('/university/majors', { params: { department_id: formData.department_id } })
+      .then(({ data }) => {
+        const active = (data.majors || []).filter(m => m.is_active !== false);
+        setMajors(active);
+        // If current major isn't in the new list, clear it
+        if (formData.major_id && !active.find(m => String(m.id) === String(formData.major_id))) {
+          setFormData(c => ({ ...c, major_id: '' }));
+        }
+      })
+      .catch(() => setMajors([]))
+      .finally(() => setMajorsLoading(false));
+  }, [formData.department_id]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -1093,7 +1459,13 @@ function EditEnrollmentModal({ enrollment, onClose, onSuccess }) {
     setError('');
 
     try {
-      const response = await api.patch(`/university/enrollments/${enrollment.id}`, formData);
+      const payload = {
+        certificate_level_id: Number(formData.certificate_level_id),
+        department_id: Number(formData.department_id),
+        major_id: formData.major_id ? Number(formData.major_id) : null,
+        batch: formData.batch,
+      };
+      const response = await api.patch(`/university/enrollments/${enrollment.id}`, payload);
       toast.success(response.data.message || 'Enrollment updated successfully');
       onSuccess();
     } catch (err) {
@@ -1105,12 +1477,47 @@ function EditEnrollmentModal({ enrollment, onClose, onSuccess }) {
   };
 
   return (
-    <Modal open={true} onClose={onClose} title="Edit Enrollment">
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="rounded-2xl bg-gray-50 p-4 dark:bg-gray-800/50">
-          <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">Reference Information</p>
-          <p className="mt-1 font-medium text-gray-900 dark:text-white">{getFullName(enrollment)}</p>
-          <p className="text-sm text-gray-600 dark:text-gray-400">Enrollment #: {enrollment.enrollment_number}</p>
+    <Modal open={true} onClose={onClose} title="Edit Enrollment" size="lg">
+      <form onSubmit={handleSubmit} className="space-y-5">
+
+        {/* ── READ-ONLY SECTION ── */}
+        <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-800/50 space-y-3">
+          <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+            Cannot be changed
+          </p>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            {/* Student Name */}
+            <div>
+              <p className="text-xs text-gray-500 dark:text-gray-400">Student Name</p>
+              <p className="mt-0.5 font-semibold text-gray-900 dark:text-white">{getFullName(enrollment)}</p>
+            </div>
+
+            {/* Enrollment Number */}
+            <div>
+              <p className="text-xs text-gray-500 dark:text-gray-400">Enrollment Number</p>
+              <p className="mt-0.5 font-semibold text-gray-900 dark:text-white font-mono text-sm">{enrollment.enrollment_number}</p>
+            </div>
+          </div>
+
+          {/* Student ID — read-only with lock */}
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-800/40 dark:bg-amber-900/20">
+            <div className="flex items-center gap-2">
+              <svg className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+              </svg>
+              <div>
+                <p className="text-xs text-amber-700 dark:text-amber-300 font-medium">Student ID (cannot be changed after enrollment)</p>
+                <p className="mt-0.5 font-bold text-amber-900 dark:text-amber-100">{enrollment.roll_number || enrollment.student_id || '—'}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Computed Program Display */}
+          <div>
+            <p className="text-xs text-gray-500 dark:text-gray-400">Program (computed from selections below)</p>
+            <p className="mt-0.5 font-medium text-gray-900 dark:text-white">{programDisplay}</p>
+          </div>
         </div>
 
         {error && (
@@ -1119,26 +1526,94 @@ function EditEnrollmentModal({ enrollment, onClose, onSuccess }) {
           </div>
         )}
 
-        <Input
-          label="Program"
-          type="text"
-          value={formData.program}
-          onChange={(e) => setFormData({ ...formData, program: e.target.value })}
-        />
-        
-        <Input
-          label="Batch"
-          type="text"
+        {/* ── EDITABLE FIELDS ── */}
+
+        {/* Certificate Level */}
+        <div className="space-y-1">
+          <SelectField
+            label="Certificate Level"
+            value={formData.certificate_level_id}
+            onChange={(value) => setFormData(c => ({ ...c, certificate_level_id: value }))}
+            options={[
+              { value: '', label: certLevelsLoading ? 'Loading levels...' : certLevelsError ? certLevelsError : 'Select Certificate Level' },
+              ...certificateLevels.map(level => ({ value: level.id, label: level.name }))
+            ]}
+            required
+            disabled={certLevelsLoading}
+          />
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2">
+          {/* Department */}
+          <div className="space-y-1">
+            <SelectField
+              label="Department"
+              value={formData.department_id}
+              onChange={(value) => setFormData(c => ({ ...c, department_id: value, major_id: '' }))}
+              options={[
+                { value: '', label: 'Select Department' },
+                ...departments.map(dept => ({ value: dept.id, label: dept.name }))
+              ]}
+              required
+            />
+            <div className="flex justify-end">
+              <a
+                href="/university/settings?tab=departments"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300"
+              >
+                Manage Departments
+              </a>
+            </div>
+          </div>
+
+          {/* Major — optional */}
+          <div className="space-y-1">
+            <SelectField
+              label="Major"
+              value={formData.major_id}
+              onChange={(value) => setFormData(c => ({ ...c, major_id: value }))}
+              options={[
+                { value: '', label: majorsLoading ? 'Loading majors...' : 'Select Major (Optional)' },
+                ...majors.map(major => ({ value: major.id, label: major.name }))
+              ]}
+              disabled={!formData.department_id || majorsLoading}
+            />
+            <div className="flex justify-end">
+              <a
+                href={`/university/settings?tab=majors${formData.department_id ? `&dept=${formData.department_id}` : ''}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300"
+              >
+                Manage Majors
+              </a>
+            </div>
+          </div>
+        </div>
+
+        {/* Batch */}
+        <SelectField
+          label="Batch / Intake"
           value={formData.batch}
-          onChange={(e) => setFormData({ ...formData, batch: e.target.value })}
+          onChange={(val) => setFormData(c => ({ ...c, batch: val }))}
+          options={[
+            { value: '', label: 'Select batch...' },
+            ...generateBatchOptions()
+          ]}
+          required
         />
 
-        <Input
-          label="Expected Graduation Date"
-          type="date"
-          value={formData.expected_graduation_date}
-          onChange={(e) => setFormData({ ...formData, expected_graduation_date: e.target.value })}
-        />
+        {/* Expected Graduation Date — removed, note shown */}
+        <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 dark:border-blue-800/40 dark:bg-blue-900/20">
+          <div className="flex items-start gap-2">
+            <Info className="mt-0.5 h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />
+            <p className="text-xs text-blue-700 dark:text-blue-300">
+              To change the expected graduation date, use the <strong>Extension Request</strong> feature on the student's enrollment.
+            </p>
+          </div>
+        </div>
 
         <div className="flex gap-3">
           <Button type="button" variant="secondary" onClick={onClose}>
@@ -1158,6 +1633,8 @@ function WithdrawalRequestsTab() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState({});
 
   const fetchRequests = useCallback(async () => {
     setLoading(true);
@@ -1165,15 +1642,20 @@ function WithdrawalRequestsTab() {
 
     try {
       const { data } = await api.get('/university/withdrawal/pending', {
-        params: { search },
+        params: { search, page },
       });
       setRequests(data.requests || []);
+      if (data.pagination) setPagination(data.pagination);
     } catch (requestError) {
       setError(requestError.response?.data?.message || 'Failed to fetch withdrawal requests');
       toast.error('Failed to fetch withdrawal requests');
     } finally {
       setLoading(false);
     }
+  }, [search, page]);
+
+  useEffect(() => {
+    setPage(1);
   }, [search]);
 
   useEffect(() => {
@@ -1182,7 +1664,7 @@ function WithdrawalRequestsTab() {
     }, search ? 300 : 0);
 
     return () => clearTimeout(timeout);
-  }, [fetchRequests, search]);
+  }, [fetchRequests, search, page]);
 
   const handleApproveWithdrawal = async (requestId, responseMessage = '') => {
     try {
@@ -1264,16 +1746,41 @@ function WithdrawalRequestsTab() {
           icon={MessageSquare}
         />
       ) : (
-        <div className="grid gap-4">
-          {requests.map((request) => (
-            <WithdrawalRequestCard
-              key={request.id}
-              request={request}
-              onApprove={handleApproveWithdrawal}
-              onReject={handleRejectWithdrawal}
-            />
-          ))}
-        </div>
+        <>
+          <div className="grid gap-4">
+            {requests.map((request) => (
+              <WithdrawalRequestCard
+                key={request.id}
+                request={request}
+                onApprove={handleApproveWithdrawal}
+                onReject={handleRejectWithdrawal}
+              />
+            ))}
+          </div>
+          {pagination.last_page > 1 && (
+            <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-gray-200 pt-6 dark:border-gray-700">
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Showing <span className="font-medium">{(pagination.current_page - 1) * 10 + 1}</span> to <span className="font-medium">{Math.min(pagination.current_page * 10, pagination.total)}</span> of <span className="font-medium">{pagination.total}</span> results
+              </p>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={pagination.current_page === 1}
+                >
+                  Previous
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => setPage((p) => Math.min(pagination.last_page, p + 1))}
+                  disabled={pagination.current_page === pagination.last_page}
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
@@ -1457,7 +1964,7 @@ function ProgramsTab() {
                           <td className="whitespace-nowrap px-4 py-3 font-medium text-gray-900 dark:text-white">
                             {student.student_name}
                           </td>
-                          <td className="whitespace-nowrap px-4 py-3">{student.student_id || 'N/A'}</td>
+                          <td className="whitespace-nowrap px-4 py-3">{student.roll_number || student.student_id || 'N/A'}</td>
                           <td className="whitespace-nowrap px-4 py-3">{student.batch || 'N/A'}</td>
                           <td className="whitespace-nowrap px-4 py-3">{new Date(student.enrollment_date).toLocaleDateString()}</td>
                           <td className="whitespace-nowrap px-4 py-3">
@@ -1487,21 +1994,26 @@ function ExtensionRequestsTab() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [counterOfferRequest, setCounterOfferRequest] = useState(null);
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState({});
 
   const fetchRequests = useCallback(async () => {
     setLoading(true);
     setError('');
 
     try {
-      const { data } = await api.get('/university/extension-requests');
+      const { data } = await api.get('/university/extension-requests', {
+        params: { page },
+      });
       setRequests(data.requests || []);
+      if (data.pagination) setPagination(data.pagination);
     } catch (requestError) {
       setError(requestError.response?.data?.message || 'Failed to fetch extension requests');
       toast.error('Failed to fetch extension requests');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [page]);
 
   useEffect(() => {
     fetchRequests();
@@ -1587,17 +2099,42 @@ function ExtensionRequestsTab() {
           icon={CalendarPlus}
         />
       ) : (
-        <div className="grid gap-4">
-          {requests.map((request) => (
-            <ExtensionRequestCard
-              key={request.id}
-              request={request}
-              onApprove={handleApprove}
-              onReject={handleReject}
-              onCounterOffer={() => setCounterOfferRequest(request)}
-            />
-          ))}
-        </div>
+        <>
+          <div className="grid gap-4">
+            {requests.map((request) => (
+              <ExtensionRequestCard
+                key={request.id}
+                request={request}
+                onApprove={handleApprove}
+                onReject={handleReject}
+                onCounterOffer={() => setCounterOfferRequest(request)}
+              />
+            ))}
+          </div>
+          {pagination.last_page > 1 && (
+            <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-gray-200 pt-6 dark:border-gray-700">
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Showing <span className="font-medium">{(pagination.current_page - 1) * 10 + 1}</span> to <span className="font-medium">{Math.min(pagination.current_page * 10, pagination.total)}</span> of <span className="font-medium">{pagination.total}</span> results
+              </p>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={pagination.current_page === 1}
+                >
+                  Previous
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => setPage((p) => Math.min(pagination.last_page, p + 1))}
+                  disabled={pagination.current_page === pagination.last_page}
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       {counterOfferRequest && (
@@ -1879,22 +2416,32 @@ function ApplicationsTab() {
   const [applications, setApplications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [approvingApp, setApprovingApp] = useState(null);
-  const [moreInfoApp, setMoreInfoApp] = useState(null);
+  const [enrollApplicationData, setEnrollApplicationData] = useState(null);
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState({});
+
+  useEffect(() => {
+    const handleOpenEnrollModal = (e) => setEnrollApplicationData(e.detail);
+    window.addEventListener('open_enroll_modal', handleOpenEnrollModal);
+    return () => window.removeEventListener('open_enroll_modal', handleOpenEnrollModal);
+  }, []);
 
   const fetchApplications = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      const { data } = await api.get('/university/enrollment-applications');
+      const { data } = await api.get('/university/enrollment-applications', {
+        params: { page },
+      });
       setApplications(data.applications || []);
+      if (data.pagination) setPagination(data.pagination);
     } catch (requestError) {
       setError(requestError.response?.data?.message || 'Failed to fetch applications');
       toast.error('Failed to fetch applications');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [page]);
 
   useEffect(() => {
     fetchApplications();
@@ -1954,59 +2501,71 @@ function ApplicationsTab() {
           icon={FileText}
         />
       ) : (
-        <div className="grid gap-4">
-          {applications.map((application) => (
-            <ApplicationCard
-              key={application.id}
-              application={application}
-              onApprove={() => setApprovingApp(application)}
-              onReject={handleReject}
-              onRequestMoreInfo={() => setMoreInfoApp(application)}
-            />
-          ))}
-        </div>
+        <>
+          <div className="grid gap-4 md:grid-cols-2">
+            {applications.map((application) => (
+              <ApplicationCard
+                key={application.id}
+                application={application}
+                onApprove={() => {
+                  window.dispatchEvent(new CustomEvent('open_enroll_modal', { detail: application }));
+                }}
+                onReject={handleReject}
+              />
+            ))}
+          </div>
+          {pagination.last_page > 1 && (
+            <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-gray-200 pt-6 dark:border-gray-700">
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Showing <span className="font-medium">{(pagination.current_page - 1) * 10 + 1}</span> to <span className="font-medium">{Math.min(pagination.current_page * 10, pagination.total)}</span> of <span className="font-medium">{pagination.total}</span> results
+              </p>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={pagination.current_page === 1}
+                >
+                  Previous
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => setPage((p) => Math.min(pagination.last_page, p + 1))}
+                  disabled={pagination.current_page === pagination.last_page}
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
+          )}
+        </>
       )}
 
-      {approvingApp && (
-        <ApproveApplicationModal
-          application={approvingApp}
-          onClose={() => setApprovingApp(null)}
+      {enrollApplicationData && (
+        <EnrollStudentModal
+          application={enrollApplicationData}
+          onClose={() => setEnrollApplicationData(null)}
           onSuccess={() => {
-            setApprovingApp(null);
+            setEnrollApplicationData(null);
             window.dispatchEvent(new Event('enrollment_applications_updated'));
             fetchApplications();
           }}
         />
       )}
 
-      {moreInfoApp && (
-        <RequestMoreInfoModal
-          application={moreInfoApp}
-          onClose={() => setMoreInfoApp(null)}
-          onSuccess={() => {
-            setMoreInfoApp(null);
-            window.dispatchEvent(new Event('enrollment_applications_updated'));
-            fetchApplications();
-          }}
-        />
-      )}
     </div>
   );
 }
 
-function ApplicationCard({ application, onApprove, onReject, onRequestMoreInfo }) {
+function ApplicationCard({ application, onApprove, onReject }) {
   const [rejectionReason, setRejectionReason] = useState('');
   const [showRejectInput, setShowRejectInput] = useState(false);
   const [processing, setProcessing] = useState(false);
 
   const statusVariant =
     application.status === 'approved' ? 'success' :
-    application.status === 'rejected' ? 'danger' :
-    application.status === 'pending' ? 'warning' :
-    application.status === 'more_info_requested' ? 'primary' : 'secondary';
+    application.status === 'rejected' ? 'danger' : 'warning';
 
-  const statusLabel =
-    application.status === 'more_info_requested' ? 'MORE INFO REQUESTED' : application.status.toUpperCase();
+  const statusLabel = application.status.toUpperCase();
 
   const isPending = application.status === 'pending';
 
@@ -2024,9 +2583,7 @@ function ApplicationCard({ application, onApprove, onReject, onRequestMoreInfo }
     <Card className={`border-2 transition hover:shadow-lg ${
       isPending
         ? 'border-amber-200 dark:border-amber-800/40'
-        : application.status === 'more_info_requested'
-          ? 'border-primary-200 dark:border-primary-800/40'
-          : 'border-gray-100 dark:border-gray-800'
+        : 'border-gray-100 dark:border-gray-800'
     }`}>
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div className="flex-1">
@@ -2042,8 +2599,11 @@ function ApplicationCard({ application, onApprove, onReject, onRequestMoreInfo }
           <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="rounded-lg bg-gray-50 p-3 dark:bg-gray-800/50">
               <p className="text-xs uppercase tracking-wider font-semibold text-gray-500 dark:text-gray-400">Program</p>
-              <p className="mt-1 text-sm font-medium text-gray-900 dark:text-white">
-                {application.program || 'Not specified'}
+              <p 
+                className="mt-1 text-sm font-medium text-gray-900 dark:text-white truncate" 
+                title={[application.certificate_level_name, application.department_name].filter(Boolean).join(' - ') || 'Not specified'}
+              >
+                {[application.certificate_level_name, application.department_name].filter(Boolean).join(' - ') || 'Not specified'}
               </p>
             </div>
             <div className="rounded-lg bg-gray-50 p-3 dark:bg-gray-800/50">
@@ -2074,9 +2634,9 @@ function ApplicationCard({ application, onApprove, onReject, onRequestMoreInfo }
             </div>
           )}
 
-          {application.university_response && application.status !== 'pending' && (
+          {application.university_response && application.status === 'rejected' && (
             <div className="mt-3 rounded-xl bg-gray-50 p-3 border border-gray-100 dark:bg-gray-800/50 dark:border-gray-700/50">
-              <p className="text-xs uppercase tracking-wider font-semibold text-gray-500 dark:text-gray-400 mb-1">University Response</p>
+              <p className="text-xs uppercase tracking-wider font-semibold text-gray-500 dark:text-gray-400 mb-1">Rejection Reason</p>
               <p className="text-sm text-gray-700 dark:text-gray-300 italic">"{application.university_response}"</p>
             </div>
           )}
@@ -2098,10 +2658,6 @@ function ApplicationCard({ application, onApprove, onReject, onRequestMoreInfo }
                 <Button variant="danger" type="button" onClick={() => setShowRejectInput(true)} className="w-full lg:w-auto">
                   <XCircle className="mr-2 h-4 w-4" />
                   Reject
-                </Button>
-                <Button variant="secondary" type="button" onClick={onRequestMoreInfo} className="w-full lg:w-auto">
-                  <Info className="mr-2 h-4 w-4" />
-                  Request More Info
                 </Button>
               </>
             ) : (
@@ -2132,272 +2688,3 @@ function ApplicationCard({ application, onApprove, onReject, onRequestMoreInfo }
   );
 }
 
-function ApproveApplicationModal({ application, onClose, onSuccess }) {
-  const [formData, setFormData] = useState({
-    student_id: application.student_current_id || '',
-    program_level: '',
-    department_id: '',
-    batch: application.batch || '',
-    enrollment_date: new Date().toISOString().split('T')[0],
-    expected_graduation_date: '',
-  });
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState('');
-  const [departments, setDepartments] = useState([]);
-
-  useEffect(() => {
-    api.get('/university/departments').then(({ data }) => {
-      setDepartments(data.departments?.filter(d => d.is_active) || []);
-    }).catch(console.error);
-  }, []);
-
-  const calculateGraduationDate = (level, enrollDateStr) => {
-    if (!level || !enrollDateStr) return '';
-    const date = new Date(enrollDateStr);
-    if (isNaN(date.getTime())) return '';
-    if (level === 'Bachelors') date.setFullYear(date.getFullYear() + 4);
-    else if (level === 'Masters') date.setFullYear(date.getFullYear() + 2);
-    else if (level === 'PhD') date.setFullYear(date.getFullYear() + 3);
-    return date.toISOString().split('T')[0];
-  };
-
-  const handleProgramLevelChange = (level) => {
-    const newGrad = calculateGraduationDate(level, formData.enrollment_date);
-    setFormData(c => ({ ...c, program_level: level, expected_graduation_date: newGrad || c.expected_graduation_date }));
-  };
-
-  const handleEnrollmentDateChange = (dateStr) => {
-    const newGrad = calculateGraduationDate(formData.program_level, dateStr);
-    setFormData(c => ({ ...c, enrollment_date: dateStr, expected_graduation_date: newGrad || c.expected_graduation_date }));
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-
-    if (formData.expected_graduation_date && new Date(formData.expected_graduation_date) <= new Date(formData.enrollment_date)) {
-      toast.error('Expected graduation date must be after enrollment date');
-      return;
-    }
-
-    setSubmitting(true);
-    setError('');
-
-    try {
-      const payload = { ...formData };
-      if (formData.department_id) payload.department_id = Number(formData.department_id);
-
-      await api.post(`/university/enrollment-applications/${application.id}/approve`, payload);
-      toast.success('Application approved — student enrolled successfully');
-      onSuccess();
-    } catch (err) {
-      const errorData = err.response?.data;
-      if (errorData?.message) {
-        let errorMessage = errorData.message;
-        if (errorData.current_enrollment) {
-          const current = errorData.current_enrollment;
-          errorMessage += `\n\nCurrent Enrollment:\nInstitution: ${current.institution}\nProgram: ${current.program} (${current.batch})\nStatus: ${current.status}`;
-        }
-        setError(errorMessage);
-        toast.error(errorData.message);
-      } else {
-        setError('Failed to approve application');
-        toast.error('Failed to approve application');
-      }
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  return (
-    <Modal open={true} onClose={onClose} title="Approve Application & Enroll Student" size="lg">
-      <form className="space-y-4" onSubmit={handleSubmit}>
-        <div className="rounded-2xl bg-green-50 p-4 dark:bg-green-900/20">
-          <p className="text-sm font-semibold text-green-800 dark:text-green-200">Approving Application From</p>
-          <p className="mt-1 font-medium text-gray-900 dark:text-white">{application.student_name}</p>
-          <p className="text-sm text-gray-600 dark:text-gray-400">{application.student_email}</p>
-          {application.program && (
-            <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">Requested Program: {application.program}</p>
-          )}
-          {application.batch && (
-            <p className="text-sm text-gray-600 dark:text-gray-400">Requested Batch: {application.batch}</p>
-          )}
-        </div>
-
-        {error && (
-          <div className="rounded-2xl border border-red-200 bg-red-50 p-4 dark:border-red-900/30 dark:bg-red-900/20">
-            <div className="flex items-start">
-              <AlertCircle className="mr-2 mt-0.5 h-5 w-5 flex-shrink-0 text-red-600 dark:text-red-400" />
-              <div className="whitespace-pre-line text-sm text-red-700 dark:text-red-300">
-                {error}
-              </div>
-            </div>
-          </div>
-        )}
-
-        <div className="space-y-1">
-          <Input
-            label="Student ID"
-            type="text"
-            placeholder="e.g. UIU-2026-001234"
-            value={formData.student_id}
-            onChange={(e) => setFormData(c => ({ ...c, student_id: e.target.value }))}
-            required
-          />
-          <p className="text-xs text-gray-500 dark:text-gray-400">
-            Assign a unique student ID for this student within your university.
-          </p>
-        </div>
-
-        <div className="grid gap-4 md:grid-cols-2">
-          <div className="space-y-1">
-            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
-              Program Level <span className="text-red-500">*</span>
-            </label>
-            <select
-              value={formData.program_level}
-              onChange={(e) => handleProgramLevelChange(e.target.value)}
-              className="block w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:focus:border-primary-400 dark:focus:ring-primary-400"
-              required
-            >
-              <option value="">Select Level</option>
-              <option value="Bachelors">Bachelors</option>
-              <option value="Masters">Masters</option>
-              <option value="PhD">PhD</option>
-            </select>
-          </div>
-          <div className="space-y-1">
-            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
-              Department
-            </label>
-            <select
-              value={formData.department_id}
-              onChange={(e) => setFormData(c => ({ ...c, department_id: e.target.value }))}
-              className="block w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:focus:border-primary-400 dark:focus:ring-primary-400"
-            >
-              <option value="">Select Department (Optional)</option>
-              {departments.map(dept => (
-                <option key={dept.id} value={dept.id}>{dept.name}</option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        <div className="grid gap-4 md:grid-cols-2">
-          <Input
-            label="Batch"
-            type="text"
-            placeholder="e.g. Spring 2024"
-            value={formData.batch}
-            onChange={(e) => setFormData(c => ({ ...c, batch: e.target.value }))}
-            required
-          />
-          <Input
-            label="Enrollment Date"
-            type="date"
-            value={formData.enrollment_date}
-            onChange={(e) => handleEnrollmentDateChange(e.target.value)}
-            required
-          />
-        </div>
-
-        <Input
-          label="Expected Graduation Date"
-          type="date"
-          value={formData.expected_graduation_date}
-          onChange={(e) => setFormData(c => ({ ...c, expected_graduation_date: e.target.value }))}
-        />
-
-        <div className="flex flex-col gap-3 pt-2 sm:flex-row">
-          <Button type="button" variant="secondary" onClick={onClose} disabled={submitting}>
-            Cancel
-          </Button>
-          <Button type="submit" variant="success" loading={submitting} className="sm:flex-1">
-            <Check className="mr-2 h-4 w-4" />
-            Approve & Enroll Student
-          </Button>
-        </div>
-      </form>
-    </Modal>
-  );
-}
-
-function RequestMoreInfoModal({ application, onClose, onSuccess }) {
-  const [message, setMessage] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState('');
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (message.length < 10) {
-      setError('Message must be at least 10 characters');
-      return;
-    }
-    setSubmitting(true);
-    setError('');
-
-    try {
-      await api.post(`/university/enrollment-applications/${application.id}/request-more-info`, {
-        university_response: message,
-      });
-      toast.success('Request for more information sent to student');
-      onSuccess();
-    } catch (err) {
-      const errorMsg = err.response?.data?.message || 'Failed to send request';
-      setError(errorMsg);
-      toast.error(errorMsg);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  return (
-    <Modal open={true} onClose={onClose} title="Request More Information">
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="rounded-2xl bg-blue-50 p-4 dark:bg-blue-900/20">
-          <p className="text-sm font-semibold text-blue-800 dark:text-blue-200">Requesting more info from</p>
-          <p className="mt-1 font-medium text-gray-900 dark:text-white">{application.student_name}</p>
-          <p className="text-sm text-gray-600 dark:text-gray-400">{application.student_email}</p>
-        </div>
-
-        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-800/30 dark:bg-amber-900/20">
-          <p className="text-sm text-amber-800 dark:text-amber-200">
-            <strong>Note:</strong> The student will be notified and can see your message on their My University page.
-            They will need to contact you directly to provide additional information.
-          </p>
-        </div>
-
-        {error && (
-          <div className="rounded-2xl border border-red-200 bg-red-50 p-3 dark:border-red-900/30 dark:bg-red-900/20">
-            <p className="text-sm text-red-700 dark:text-red-300">{error}</p>
-          </div>
-        )}
-
-        <div>
-          <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
-            Message to Student <span className="text-red-500">*</span>
-          </label>
-          <textarea
-            className="w-full rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white dark:focus:border-primary-400 dark:focus:ring-primary-400 min-h-[120px]"
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            placeholder="Explain what additional information or documents you need from the student (min 10 characters)..."
-            required
-            minLength={10}
-            maxLength={1000}
-          />
-          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">{message.length}/1000 characters</p>
-        </div>
-
-        <div className="flex gap-3">
-          <Button type="button" variant="secondary" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button type="submit" loading={submitting} className="flex-1">
-            <Info className="mr-2 h-4 w-4" />
-            Send Request
-          </Button>
-        </div>
-      </form>
-    </Modal>
-  );
-}
