@@ -83,12 +83,12 @@ export default function Landing() {
       <PublicNavbar />
 
       {/* Modern Hero Section */}
-      <section className="relative overflow-hidden pt-24 pb-32">
+      <section className="relative overflow-hidden pt-12 pb-32">
         {/* Background Gradients & Glassmorphism */}
         <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-[var(--brand)]/10 blur-[100px] pointer-events-none animate-pulse"></div>
         <div className="absolute bottom-[-10%] right-[-10%] w-[30%] h-[30%] rounded-full bg-[var(--brand)]/10 blur-[80px] pointer-events-none"></div>
 
-        <div className="max-w-7xl mx-auto px-6 relative z-10">
+        <div className="w-full px-4 sm:px-6 lg:px-8 relative z-10">
           <div className="flex flex-col lg:flex-row items-center gap-16">
             <div className="flex-1 text-center lg:text-left space-y-8">
               <div className="inline-flex items-center gap-2 rounded-full bg-[var(--bg-elevated)] border border-[var(--border)] px-4 py-2 text-sm font-medium text-[var(--brand)] shadow-sm">
@@ -171,7 +171,7 @@ export default function Landing() {
 
       {/* Stats Section with Glassmorphism */}
       <section className="relative py-16 border-y border-[var(--border)] bg-[var(--bg-surface)]/50">
-        <div className="max-w-7xl mx-auto px-6">
+        <div className="w-full px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {stats.map((item, idx) => (
               <div key={idx} className="group relative rounded-2xl bg-[var(--bg-elevated)] border border-[var(--border)] p-8 text-center transition-all hover:-translate-y-2 hover:shadow-xl hover:border-[var(--brand)]/30 overflow-hidden">
@@ -193,7 +193,7 @@ export default function Landing() {
 
       {/* Features Grid */}
       <section id="why-eduauth" className="py-24 relative">
-        <div className="max-w-7xl mx-auto px-6">
+        <div className="w-full px-4 sm:px-6 lg:px-8">
           <div className="text-center max-w-3xl mx-auto mb-16 space-y-4">
             <h2 className="text-[var(--brand)] font-semibold tracking-wide uppercase text-sm">Why Choose Us</h2>
             <h3 className="text-3xl md:text-5xl font-bold text-[var(--text-primary)]">Uncompromising Security &amp; Speed</h3>
@@ -216,7 +216,7 @@ export default function Landing() {
 
       {/* Steps Section */}
       <section className="py-24 bg-[var(--bg-surface)] border-t border-[var(--border)]">
-        <div className="max-w-7xl mx-auto px-6">
+        <div className="w-full px-4 sm:px-6 lg:px-8">
           <div className="text-center max-w-3xl mx-auto mb-16 space-y-4">
             <h2 className="text-[var(--brand)] font-semibold tracking-wide uppercase text-sm">Workflow</h2>
             <h3 className="text-3xl md:text-5xl font-bold text-[var(--text-primary)]">Three Simple Steps</h3>

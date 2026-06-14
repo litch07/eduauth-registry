@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Download, Lock, Info } from 'lucide-react';
 import Select from 'react-select';

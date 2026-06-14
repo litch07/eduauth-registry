@@ -38,7 +38,7 @@ const Footer = ({ variant = 'full' }) => {
 
   return (
     <footer className="bg-[var(--bg-surface)] border-t border-[var(--border)] pt-[40px] pb-[24px] font-['Inter']">
-      <div className="w-full px-4 sm:px-6 lg:px-8 max-w-[1200px] mx-auto">
+      <div className="w-full px-4 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-8 mb-16">
           
           {/* Left Column: Brand, Description, Socials */}

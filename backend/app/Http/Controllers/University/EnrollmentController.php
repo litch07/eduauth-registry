@@ -215,7 +215,7 @@ class EnrollmentController extends Controller
                 'certificate_level_id' => 'required|integer|exists:certificate_levels,id',
                 'program_level' => 'nullable|string|max:255',
                 'batch' => 'required|string|max:100',
-                'roll_number' => ['nullable', 'string', 'max:100'],
+                'roll_number' => ['required', 'string', 'max:100'],
                 'enrollment_date' => 'required|date',
                 'expected_graduation_date' => 'nullable|date|after:enrollment_date',
             ]);
@@ -1440,7 +1440,7 @@ class EnrollmentController extends Controller
     {
         try {
             $validator = Validator::make($request->all(), [
-                'roll_number' => ['nullable', 'string', 'max:100'],
+                'roll_number' => ['required', 'string', 'max:100'],
                 'program_level' => 'nullable|string|max:255',
                 'department_id' => 'nullable|integer|exists:departments,id',
                 'batch' => 'required|string|max:100',

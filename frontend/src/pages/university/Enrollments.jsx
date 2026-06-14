@@ -1045,6 +1045,7 @@ function EnrollStudentModal({ open, onClose, onSuccess, application }) {
               placeholder="e.g. UIU-2026-001234"
               value={formData.roll_number}
               onChange={(event) => setFormData((current) => ({ ...current, roll_number: event.target.value }))}
+              required
             />
             <p className="text-xs text-gray-500 dark:text-gray-400">
               The ID your institution assigns to this student. This will appear on their certificate and cannot be changed after enrollment.

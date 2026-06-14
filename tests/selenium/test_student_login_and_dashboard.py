@@ -25,14 +25,14 @@ def run_test():
         print("2. Entering email")
         email_input = wait.until(EC.presence_of_element_located((By.XPATH, "//input[@type='email' or contains(@name, 'email')]")))
         email_input.clear()
-        email_input.send_keys("ssadidahmed01@gmail.com")
+        email_input.send_keys("sahmed2330154@bscse.uiu.ac.bd")
         print("[OK] Step completed")
         
         # Step 3: Enter password
         print("3. Entering password")
         password_input = driver.find_element(By.XPATH, "//input[@type='password' or contains(@name, 'password')]")
         password_input.clear()
-        password_input.send_keys("password123")
+        password_input.send_keys("password")
         print("[OK] Step completed")
         
         # Step 4: Click Login button

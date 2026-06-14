@@ -101,7 +101,14 @@ export default function RegisterForm({ defaultRole = 'student' }) {
 
     try {
       const payload = { ...data };
-      await authService.register(payload);
+      // For Selenium testing:
+      const res = await authService.register(payload);
+      if (res?.data?.verification_code) {
+        window.__TEST_OTP__ = res.data.verification_code;
+      }
+
+      // Standard registration:
+      // await authService.register(payload);
 
       setVerificationEmail(data.email);
       setModalOpen(true);

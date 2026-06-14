@@ -7,7 +7,39 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
+def clear_existing_student():
+    print("Clearing existing student database records for repeatability...")
+    import subprocess
+    import os
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    backend_dir = os.path.abspath(os.path.join(script_dir, "../../backend"))
+    tinker_cmd = (
+        'php artisan tinker --execute="'
+        '$email = \'sahmed2330154@bscse.uiu.ac.bd\'; '
+        '$user = App\\Models\\User::where(\'email\', $email)->first(); '
+        'if ($user) { '
+        '    $student = App\\Models\\Student::where(\'user_id\', $user->id)->first(); '
+        '    if ($student) { '
+        '        App\\Models\\EnrollmentApplication::where(\'student_id\', $student->id)->delete(); '
+        '        App\\Models\\Enrollment::where(\'student_id\', $student->id)->forceDelete(); '
+        '        App\\Models\\Student::where(\'user_id\', $user->id)->forceDelete(); '
+        '    } '
+        '    $user->forceDelete(); '
+        '} '
+        'App\\Models\\PendingRegistration::where(\'email\', $email)->delete();'
+        '"'
+    )
+    try:
+        res = subprocess.run(tinker_cmd, shell=True, cwd=backend_dir, capture_output=True, text=True)
+        if res.returncode == 0:
+            print("[OK] Database cleared")
+        else:
+            print(f"[WARNING] Database clear failed: {res.stderr or res.stdout}")
+    except Exception as e:
+        print(f"[WARNING] Failed to clear database: {e}")
+
 def run_test():
+    clear_existing_student()
     print("Setting up WebDriver...")
     service = Service(ChromeDriverManager().install())
     options = webdriver.ChromeOptions()
@@ -72,11 +104,14 @@ def run_test():
             except:
                 pass
 
-        fill_input_by_name(['first_name', 'firstName'], "Test")
-        fill_input_by_name(['last_name', 'lastName'], f"Student{random_suffix}")
-        fill_input_by_name(['email', 'email_address'], f"test.student.{random_suffix}@test.com")
-        fill_input_by_name(['password'], "TestPass123!")
-        fill_input_by_name(['password_confirmation', 'confirmPassword', 'password_confirm'], "TestPass123!")
+        student_email = "sahmed2330154@bscse.uiu.ac.bd"
+        print(f"Registered Email: {student_email}")
+
+        fill_input_by_name(['first_name', 'firstName'], "Sadid")
+        fill_input_by_name(['last_name', 'lastName'], "Ahmed")
+        fill_input_by_name(['email', 'email_address'], student_email)
+        fill_input_by_name(['password'], "password")
+        fill_input_by_name(['password_confirmation', 'confirmPassword', 'password_confirm'], "password")
         fill_input_by_name(['nid', 'national_id'], f"1234567890{random_suffix}")
         fill_input_by_name(['date_of_birth', 'dob', 'birth_date'], "01/01/2000")
         fill_input_by_name(['phone', 'phone_number', 'mobile'], "01700000000")
@@ -93,6 +128,11 @@ def run_test():
         
         print("[OK] Step completed")
         
+        # Wait for 5 seconds in the filled registration page
+        print("   [INFO] Waiting 5 seconds on the filled registration page...")
+        import time
+        time.sleep(5)
+        
         # Step 7: Submit the form
         print("7. Submitting the form")
         submit_btn = driver.find_element(By.XPATH, "//button[@type='submit']")
@@ -101,7 +141,6 @@ def run_test():
 
         # Step 8: Wait for OTP modal and fetch OTP from window
         print("8. Waiting for OTP modal and fetching OTP from window object...")
-        import time
         time.sleep(2) # Give API time to respond
         otp = wait.until(lambda d: d.execute_script("return window.__TEST_OTP__;"))
         print(f"   [INFO] OTP Fetched directly from backend response: {otp}")
@@ -129,9 +168,11 @@ def run_test():
         
         # Step 11: Login as admin
         print("11. Logging in as admin...")
-        driver.delete_all_cookies() # Clear session before admin login
-        driver.execute_script("window.localStorage.clear();") # Clear React auth state
         driver.get("http://localhost:5173/login")
+        time.sleep(1)
+        driver.execute_script("window.localStorage.clear();")
+        driver.get("http://localhost:5173/login")
+        
         email_input = wait.until(EC.presence_of_element_located((By.XPATH, "//input[@type='email']")))
         email_input.clear()
         email_input.send_keys("eduauthregistry@gmail.com")
@@ -153,9 +194,9 @@ def run_test():
         print("[OK] Step completed")
         
         # Step 13: Approve the new student
-        email = f"test.student.{random_suffix}@test.com"
+        email = student_email
         print("13. Finding the new student and clicking Approve...")
-        time.sleep(2)
+        time.sleep(6)
         approve_btn = wait.until(lambda d: d.execute_script(f"return Array.from(document.querySelectorAll('tr')).filter(tr => tr.textContent.includes('{email}')).map(tr => Array.from(tr.querySelectorAll('button')).find(b => b.textContent.includes('Approve'))).find(b => b);"))
              
         driver.execute_script("arguments[0].click();", approve_btn)
@@ -165,11 +206,39 @@ def run_test():
         print("14. Confirming approval in modal...")
         confirm_btn = wait.until(lambda d: d.execute_script("return Array.from(document.querySelectorAll('button')).filter(b => b.textContent.includes('Approve')).pop();"))
         driver.execute_script("arguments[0].click();", confirm_btn)
-        time.sleep(2)
+        time.sleep(5)
         print("[OK] Step completed")
+
+        # ==========================================
+        # PART 3: Student Re-login
+        # ==========================================
+        print("\n--- Phase 3: Student Re-login ---")
+        print("15. Logging in as the newly approved student...")
+        driver.get("http://localhost:5173/login")
+        time.sleep(1)
+        driver.execute_script("window.localStorage.clear();")
+        driver.get("http://localhost:5173/login")
+        
+        email_input = wait.until(EC.presence_of_element_located((By.XPATH, "//input[@type='email']")))
+        email_input.clear()
+        email_input.send_keys(student_email)
+        
+        pass_input = driver.find_element(By.XPATH, "//input[@type='password']")
+        pass_input.clear()
+        pass_input.send_keys("password")
+        
+        login_btn = driver.find_element(By.XPATH, "//button[@type='submit']")
+        driver.execute_script("arguments[0].click();", login_btn)
+        
+        wait.until(EC.url_contains("/student/dashboard"))
+        print("[OK] Student logged in and redirected to dashboard successfully!")
+        time.sleep(3)
+        
         print("\nTest passed successfully!")
         
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         print(f"[FAIL] Step failed: {str(e)}")
         sys.exit(1)
     finally:

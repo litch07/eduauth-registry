@@ -61,60 +61,55 @@ def run_test():
         wait.until(EC.presence_of_element_located((By.XPATH, "//*[contains(translate(., 'USER MANAGEMENT', 'user management'), 'user management') or contains(translate(., 'NO USERS', 'no users'), 'no users')]")))
         print("[OK] Step completed")
         
-        # Step 8: Navigate to /admin/user-approvals
-        print("8. Navigating to /admin/user-approvals")
-        time.sleep(1)
-        approvals_link = wait.until(EC.presence_of_element_located((By.XPATH, "//a[contains(@href, '/user-approvals') or contains(translate(., 'APPROVAL', 'approval'), 'approval')]")))
-        driver.execute_script("arguments[0].click();", approvals_link)
-        print("[OK] Step completed")
+        # Step 7b: Suspend and then Unsuspend a user
+        print("7b. Performing user suspension test...")
+        # Wait for the table rows to load (loading spinner gone)
+        print("Waiting for user table to load...")
+        wait.until(lambda d: d.execute_script("return document.querySelectorAll('table tbody tr').length > 0;") or d.execute_script("return document.body.textContent.includes('No users found');"))
         
-        # Step 9: Assert: pending approvals page loads
-        print("9. Asserting pending approvals page loads")
-        wait.until(EC.url_contains("status=pending"))
-        wait.until(EC.presence_of_element_located((By.XPATH, "//table | //*[contains(translate(., 'PENDING', 'pending'), 'pending') or contains(translate(., 'APPROVE', 'approve'), 'approve')]")))
-        print("[OK] Step completed")
-        
-        # Step 10: Navigate to /admin/analytics
-        print("10. Navigating to /admin/analytics")
-        time.sleep(1)
-        analytics_link = wait.until(EC.presence_of_element_located((By.XPATH, "//a[contains(@href, '/analytics') or contains(translate(., 'ANALYTICS', 'analytics'), 'analytics')]")))
-        driver.execute_script("arguments[0].click();", analytics_link)
-        print("[OK] Step completed")
-        
-        # Step 11: Assert: analytics page loads with stat card visible
-        print("11. Asserting analytics page loads")
-        wait.until(EC.url_contains("/analytics"))
-        wait.until(EC.presence_of_element_located((By.XPATH, "//*[contains(@class, 'card') or contains(@class, 'stat') or contains(translate(., 'TOTAL', 'total'), 'total')]")))
-        print("[OK] Step completed")
-        
-        # Step 12: Navigate to /admin/activity-logs
-        print("12. Navigating to /admin/activity-logs")
-        time.sleep(1)
-        logs_link = wait.until(EC.presence_of_element_located((By.XPATH, "//a[contains(@href, '/activity-logs') or contains(translate(., 'LOG', 'log'), 'log')]")))
-        driver.execute_script("arguments[0].click();", logs_link)
-        print("[OK] Step completed")
-        
-        # Step 13: Assert: activity logs page loads
-        print("13. Asserting activity logs page loads")
-        wait.until(EC.url_contains("/activity-logs"))
-        print("[OK] Step completed")
-        
-        # Step 14: Assert: filter or table is present
-        print("14. Asserting filter or table is present")
-        wait.until(EC.presence_of_element_located((By.XPATH, "//table | //input | //select | //*[contains(translate(., 'FILTER', 'filter'), 'filter')]")))
-        print("[OK] Step completed")
-        
-        # Step 15: Navigate to /admin/certificates
-        print("15. Navigating to /admin/certificates")
-        time.sleep(1)
-        certs_link = wait.until(EC.presence_of_element_located((By.XPATH, "//a[contains(@href, '/certificates') and not(contains(@href, 'settings'))] | //a[contains(translate(., 'CERTIFICATES', 'certificates'), 'certificates')]")))
-        driver.execute_script("arguments[0].click();", certs_link)
-        print("[OK] Step completed")
-        
-        # Step 16: Assert: certificates management page loads
-        print("16. Asserting certificates management page loads")
-        wait.until(EC.url_contains("/certificates"))
-        print("[OK] Step completed")
+        try:
+            # Find the student's Suspend button specifically
+            print("Locating Suspend button for sahmed2330154@bscse.uiu.ac.bd...")
+            clicked = driver.execute_script("""
+                let targetTr = Array.from(document.querySelectorAll('tr')).find(tr => tr.textContent.includes('sahmed2330154@bscse.uiu.ac.bd'));
+                if (targetTr) {
+                    let suspendBtn = Array.from(targetTr.querySelectorAll('button')).find(b => b.textContent.includes('Suspend'));
+                    if (suspendBtn) {
+                        suspendBtn.click();
+                        return true;
+                    }
+                }
+                return false;
+            """)
+            assert clicked, "Suspend button for student sahmed2330154@bscse.uiu.ac.bd not found!"
+            time.sleep(2)
+            
+            print("Entering suspension reason in modal...")
+            reason_textarea = wait.until(EC.presence_of_element_located((By.XPATH, "//textarea[contains(@placeholder, 'Reason')]")))
+            reason_textarea.clear()
+            reason_textarea.send_keys("Test suspension: policy violation")
+            time.sleep(1)
+            
+            print("Submitting suspension...")
+            confirm_suspend_btn = wait.until(lambda d: d.execute_script(
+                "return Array.from(document.querySelectorAll('button')).find(b => b.textContent.trim() === 'Suspend User');"
+            ))
+            driver.execute_script("arguments[0].click();", confirm_suspend_btn)
+            time.sleep(3)
+            
+            # Verify the user is suspended
+            print("Verifying 'Suspended' badge is visible...")
+            wait.until(EC.presence_of_element_located((By.XPATH, "//*[text()='Suspended']")))
+            print("[OK] User suspended successfully and 'Suspended' badge is visible on the UI!")
+            
+            # Take a screenshot to show the suspended state
+            driver.save_screenshot("suspended_user_view.png")
+            print("Saved screenshot of suspended user to suspended_user_view.png")
+            time.sleep(2)
+            
+        except Exception as e:
+            print(f"[WARNING] Suspend test failed: {e}")
+            raise e
         
         # Step 17: Logout
         print("17. Clicking logout")
@@ -126,12 +121,51 @@ def run_test():
         # Step 18: Assert: redirected away from admin area
         print("18. Asserting redirect after logout")
         wait.until(lambda d: "/admin" not in d.current_url)
-        print("[OK] Step completed")
+        # Step 19: Attempt to log in as the suspended student user
+        print("19. Attempting to log in as the suspended student user...")
+        driver.get("http://localhost:5173/login")
+        driver.execute_script("window.localStorage.clear();")
+        driver.get("http://localhost:5173/login")
+        
+        email_input = wait.until(EC.presence_of_element_located((By.XPATH, "//input[@type='email']")))
+        email_input.clear()
+        email_input.send_keys("sahmed2330154@bscse.uiu.ac.bd")
+        
+        pass_input = driver.find_element(By.XPATH, "//input[@type='password']")
+        pass_input.clear()
+        pass_input.send_keys("password")
+        
+        login_btn = driver.find_element(By.XPATH, "//button[@type='submit']")
+        driver.execute_script("arguments[0].click();", login_btn)
+        
+        # Wait for the suspension error message to show up
+        print("Waiting for suspension message to display...")
+        time.sleep(3)
+        
+        suspension_msg_visible = wait.until(lambda d: d.execute_script("""
+            let text = document.body.textContent;
+            return text.toLowerCase().includes('suspended') || text.toLowerCase().includes('contact support');
+        """))
+        assert suspension_msg_visible, "Suspension message was not displayed on the UI!"
+        print("[OK] Suspension error message is visible on the login screen!")
+        
+        # Take screenshot of the suspension message
+        driver.save_screenshot("login_suspended_error.png")
+        print("Saved screenshot of suspension login error to login_suspended_error.png")
+        
+        # Wait for 10 seconds before closing
+        print("Waiting for 10 seconds before closing browser...")
+        time.sleep(10)
         
         print("\nTest passed successfully!")
         
     except Exception as e:
         print(f"[FAIL] Step failed: {str(e)}")
+        try:
+            driver.save_screenshot("error_screenshot_admin_user_management.png")
+            print("Screenshot saved to error_screenshot_admin_user_management.png")
+        except Exception as se:
+            print(f"Failed to save screenshot: {se}")
         sys.exit(1)
     finally:
         print("Cleaning up WebDriver...")

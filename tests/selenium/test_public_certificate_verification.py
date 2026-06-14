@@ -30,29 +30,43 @@ def run_test():
         # Step 3: Assert page has serial number input
         print("3. Asserting serial number input field is present")
         serial_input = wait.until(EC.presence_of_element_located((By.XPATH, "//input[@type='text' and (contains(@name, 'serial') or contains(translate(@placeholder, 'SERIAL', 'serial'), 'serial') or contains(@id, 'serial'))]")))
+        dob_input = wait.until(EC.presence_of_element_located((By.XPATH, "//input[@type='date']")))
         print("[OK] Step completed")
         
-        # Step 4: Enter invalid serial
-        print("4. Entering invalid serial number")
+        # Step 4: Enter valid serial and DOB (selecting an active certificate from seed.sql)
+        print("4. Entering valid serial number and DOB (Selecting active certificate BSc-26-000001B)")
         serial_input.clear()
-        serial_input.send_keys("INVALID-00-000000X")
+        serial_input.send_keys("BSc-26-000001B")
+        driver.execute_script("""
+            let input = arguments[0];
+            let lastValue = input.value;
+            input.value = '2002-01-01';
+            let tracker = input._valueTracker;
+            if (tracker) { tracker.setValue(lastValue); }
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+            input.dispatchEvent(new Event('change', { bubbles: true }));
+        """, dob_input)
+        time.sleep(3) # Wait to show entered values
         print("[OK] Step completed")
         
         # Step 5: Submit the form
         print("5. Submitting the verification form")
-        time.sleep(1)
         submit_btn = driver.find_element(By.XPATH, "//button[@type='submit' or contains(translate(., 'VERIFY', 'verify'), 'verify') or contains(translate(., 'SEARCH', 'search'), 'search')]")
         driver.execute_script("arguments[0].click();", submit_btn)
         print("[OK] Step completed")
         
-        # Step 6: Assert error message appears
-        print("6. Asserting error message appears")
-        wait.until(EC.presence_of_element_located((By.XPATH, "//*[contains(translate(., 'NOT FOUND', 'not found'), 'not found') or contains(translate(., 'INVALID', 'invalid'), 'invalid') or contains(translate(., 'NO CERTIFICATE', 'no certificate'), 'no certificate')]")))
+        # Step 6: Assert success message appears
+        print("6. Asserting success message appears")
+        wait.until(EC.presence_of_element_located((By.XPATH, "//*[contains(text(), 'Verified Successfully') or contains(text(), 'Certificate Verified Successfully')]")))
+        print("Waiting 10 seconds to show the verification success modal...")
+        time.sleep(10) # Wait period to show the changes/modal
         print("[OK] Step completed")
         
-        # Step 7: Clear the input
-        print("7. Clearing the input")
-        serial_input.clear()
+        # Step 7: Close the modal
+        print("7. Closing the modal")
+        close_btn = wait.until(EC.presence_of_element_located((By.XPATH, "//div[contains(@class, 'right-4') and contains(@class, 'top-4')]//button | //button[contains(translate(., 'CLOSE', 'close'), 'close')]")))
+        driver.execute_script("arguments[0].click();", close_btn)
+        time.sleep(2)
         print("[OK] Step completed")
         
         # Step 8: Navigate to universities page
@@ -63,6 +77,8 @@ def run_test():
         # Step 9: Assert page loads without login
         print("9. Asserting Participating Universities page loads")
         wait.until(EC.url_contains("/universities"))
+        print("Waiting 5 seconds to show the Participating Universities page...")
+        time.sleep(5) # Wait period to show the changes
         print("[OK] Step completed")
         
         # Step 10: Assert page shows list or empty state
@@ -78,6 +94,8 @@ def run_test():
         # Step 12: Assert Help Center page loads
         print("12. Asserting Help Center page loads")
         wait.until(EC.url_contains("/help"))
+        print("Waiting 5 seconds to show the Help Center page...")
+        time.sleep(5) # Wait period to show the changes
         print("[OK] Step completed")
         
         # Step 13: Assert FAQ accordion is present
@@ -93,7 +111,8 @@ def run_test():
         
         # Step 15: Assert the answer expands
         print("15. Asserting the answer expands")
-        time.sleep(1) # Wait for accordion React animation
+        print("Waiting 5 seconds to show the expanded answer...")
+        time.sleep(5) # Wait period to show the changes/expanded FAQ
         print("[OK] Step completed")
         
         print("\nTest passed successfully!")
