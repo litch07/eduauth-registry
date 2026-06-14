@@ -83,7 +83,7 @@ export default function Landing() {
       <PublicNavbar />
 
       {/* Modern Hero Section */}
-      <section className="relative overflow-hidden pt-12 pb-32">
+      <section className="relative overflow-hidden pt-12 pb-32 px-[15px]">
         {/* Background Gradients & Glassmorphism */}
         <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-[var(--brand)]/10 blur-[100px] pointer-events-none animate-pulse"></div>
         <div className="absolute bottom-[-10%] right-[-10%] w-[30%] h-[30%] rounded-full bg-[var(--brand)]/10 blur-[80px] pointer-events-none"></div>
@@ -129,7 +129,7 @@ export default function Landing() {
               </div>
             </div>
 
-            <div className="flex-1 w-full max-w-lg lg:max-w-none">
+            <div className="flex-1 w-full max-w-[502px] lg:max-w-none">
               <div className="relative rounded-2xl bg-[var(--bg-surface)]/80 backdrop-blur-xl border border-[var(--border)] p-8 shadow-2xl">
                 <div className="absolute -top-4 -right-4 h-24 w-24 rounded-full bg-gradient-to-br from-[var(--brand)] to-purple-500 blur-2xl opacity-20 animate-pulse"></div>
                 <div className="relative z-10 space-y-6">
