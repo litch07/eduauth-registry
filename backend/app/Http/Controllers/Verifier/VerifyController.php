@@ -358,8 +358,11 @@ class VerifyController extends Controller
         $paginated = $query->latest('verified_at')->paginate($perPage);
 
         $items = collect($paginated->items())->map(function ($log) {
+            // Only expose student name and certificate details on successful verifications
+            $isSuccess = $log->verification_result === 'success';
+
             $studentName = null;
-            if ($log->certificate && $log->certificate->student) {
+            if ($isSuccess && $log->certificate && $log->certificate->student) {
                 $studentName = $log->certificate->student->full_name;
             }
 
@@ -367,11 +370,12 @@ class VerifyController extends Controller
                 'id'           => $log->id,
                 'serial'       => $log->serial,
                 'student_name' => $studentName,
-                'institution'  => $log->certificate?->institution?->name,
+                'institution'  => $isSuccess ? $log->certificate?->institution?->name : null,
                 'status'       => $log->verification_result,
                 'verified_at'  => $log->verified_at?->format('Y-m-d H:i'),
                 'details'      => $log->details,
-                'certificate'  => $log->certificate ? [
+                // Certificate details are only returned for successful verifications
+                'certificate'  => ($isSuccess && $log->certificate) ? [
                     'serial'       => $log->certificate->serial,
                     // HIGH-15 (GROUP 3): Renamed key 'degree_title' → 'certificate_level' for consistent API response
                     'certificate_level' => $log->certificate->certificate_name,

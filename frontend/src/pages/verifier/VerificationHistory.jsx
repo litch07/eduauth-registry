@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   History, Filter, Download, ChevronLeft, ChevronRight,
   CheckCircle, XCircle, AlertCircle, Eye, Search, X,
-  ShieldCheck, Calendar, Building2, Hash, User, Award,
+  ShieldCheck, Calendar, Building2, Hash, User, Award, Lock, Ban, Info,
 } from 'lucide-react';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import Card from '../../components/shared/Card';
@@ -44,6 +44,93 @@ function DetailRow({ icon: Icon, label, value }) {
       {Icon && <Icon className="mt-0.5 h-4 w-4 flex-shrink-0 text-gray-400" />}
       <span className="w-36 flex-shrink-0 text-sm text-gray-500 dark:text-gray-400">{label}</span>
       <span className="text-sm font-medium text-gray-900 dark:text-white">{value}</span>
+    </div>
+  );
+}
+
+const ERROR_DETAILS = {
+  dob_mismatch: {
+    Icon: XCircle,
+    color: 'red',
+    title: 'Date of Birth Mismatch',
+    message:
+      'The date of birth you provided does not match the records associated with this certificate. Please verify the date of birth and try again.',
+    hint: 'If you believe this is an error, please contact the issuing institution directly.',
+  },
+  not_found: {
+    Icon: Info,
+    color: 'red',
+    title: 'Certificate Not Found',
+    message:
+      'No certificate matching the provided serial number was found in our registry. The serial number may be incorrect or the certificate may not have been registered.',
+    hint: 'Double-check the serial number printed on the physical certificate and try again.',
+  },
+  revoked: {
+    Icon: Ban,
+    color: 'amber',
+    title: 'Certificate Revoked',
+    message:
+      'This certificate has been officially revoked by the issuing institution and is no longer considered valid.',
+    hint: 'For further information regarding this revocation, please contact the issuing institution.',
+  },
+  private_certificate: {
+    Icon: Lock,
+    color: 'amber',
+    title: 'Certificate Access Restricted',
+    message:
+      'The certificate holder has set this certificate to private. Public verification is not permitted for this record.',
+    hint: 'The certificate holder may grant access by updating their sharing preferences.',
+  },
+};
+
+function VerificationErrorPanel({ status, serial }) {
+  const cfg = ERROR_DETAILS[status] || {
+    Icon: AlertCircle,
+    color: 'red',
+    title: 'Verification Unsuccessful',
+    message: 'This verification attempt did not succeed. No certificate details are available.',
+    hint: null,
+  };
+
+  const { Icon, color, title, message, hint } = cfg;
+
+  const colorMap = {
+    red: {
+      wrap: 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800',
+      icon: 'text-red-500',
+      title: 'text-red-800 dark:text-red-300',
+      message: 'text-red-700 dark:text-red-400',
+      hint: 'text-red-600/70 dark:text-red-400/70',
+    },
+    amber: {
+      wrap: 'bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800',
+      icon: 'text-amber-500',
+      title: 'text-amber-800 dark:text-amber-300',
+      message: 'text-amber-700 dark:text-amber-400',
+      hint: 'text-amber-600/70 dark:text-amber-400/70',
+    },
+  };
+
+  const c = colorMap[color] || colorMap.red;
+
+  return (
+    <div>
+      <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">Verification Result</h3>
+      <div className={`rounded-xl px-5 py-4 flex gap-4 ${c.wrap}`}>
+        <Icon className={`mt-0.5 h-5 w-5 flex-shrink-0 ${c.icon}`} />
+        <div className="space-y-1.5">
+          <p className={`text-sm font-semibold ${c.title}`}>{title}</p>
+          <p className={`text-sm leading-relaxed ${c.message}`}>{message}</p>
+          {hint && (
+            <p className={`text-xs mt-2 ${c.hint}`}>
+              <span className="font-medium">Note: </span>{hint}
+            </p>
+          )}
+          <p className="text-xs text-gray-400 dark:text-gray-500 mt-2 font-mono">
+            Serial queried: <span className="font-medium">{serial || '—'}</span>
+          </p>
+        </div>
+      </div>
     </div>
   );
 }
@@ -462,8 +549,8 @@ export default function VerificationHistory() {
               })()}
             </div>
 
-            {/* Certificate details if available */}
-            {selectedLog.certificate ? (
+            {/* Certificate details — only shown for successful verifications */}
+            {selectedLog.status === 'success' && selectedLog.certificate ? (
               <div>
                 <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">Certificate Details</h3>
                 <div className="rounded-xl border border-gray-100 dark:border-gray-800 divide-y divide-gray-100 dark:divide-gray-800 px-4">
@@ -478,15 +565,9 @@ export default function VerificationHistory() {
                   <DetailRow icon={Calendar}  label="Issue Date"    value={selectedLog.certificate.issue_date} />
                 </div>
               </div>
-            ) : (
-              <div>
-                <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">Search Details</h3>
-                <div className="rounded-xl border border-gray-100 dark:border-gray-800 divide-y divide-gray-100 dark:divide-gray-800 px-4">
-                  <DetailRow icon={Hash}     label="Serial Searched"  value={selectedLog.serial} />
-                  <DetailRow icon={Calendar} label="Verified At"      value={selectedLog.verified_at} />
-                </div>
-              </div>
-            )}
+            ) : selectedLog.status !== 'success' ? (
+              <VerificationErrorPanel status={selectedLog.status} serial={selectedLog.serial} />
+            ) : null}
 
             <div className="flex justify-between items-center pt-2">
               <span className="text-xs text-gray-400">Verified: {selectedLog.verified_at}</span>
