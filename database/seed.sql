@@ -69,7 +69,7 @@ INSERT INTO institutions (id, user_id, name, registration_number, address, city,
 INSERT INTO students (id, user_id, first_name, middle_name, last_name, nid_hash, nid_encrypted, date_of_birth, gender, phone, address, created_at, updated_at) VALUES
 (1, 3,  'Sadid',        NULL,   'Ahmed',    SHA2('NID-010101-001', 256), NULL, '2002-01-01', 'Male',   '+8801700001001', 'Mirpur, Dhaka',      NOW(), NOW()),
 (2, 4,  'M.M. Sayem',   NULL,   'Prodhan',  SHA2('NID-010101-002', 256), NULL, '2002-01-01', 'Male',   '+8801700001002', 'Mohammadpur, Dhaka', NOW(), NOW()),
-(3, 5,  'Assaduzzaman', NULL,   'Nur',      SHA2('NID-010101-003', 256), NULL, '2002-01-01', 'Male',   '+8801700001003', 'Uttara, Dhaka',      NOW(), NOW()),
+(3, 5,  'Md. Assaduzzaman', NULL,   'Nur',      SHA2('NID-010101-003', 256), NULL, '2002-01-01', 'Male',   '+8801700001003', 'Uttara, Dhaka',      NOW(), NOW()),
 (4, 9,  'Kanij',        NULL,   'Fatema',   SHA2('NID-010101-004', 256), NULL, '2001-06-15', 'Female', '+8801700001004', 'Gulshan, Dhaka',     NOW(), NOW()),
 (5, 10, 'Safwan Al',    NULL,   'Sajid',    SHA2('NID-010101-005', 256), NULL, '2000-11-20', 'Male',   '+8801700001005', 'Dhanmondi, Dhaka',   NOW(), NOW()),
 (6, 11, 'Pending',      NULL,   'Student',  SHA2('NID-010101-006', 256), NULL, '2003-03-10', 'Other',  '+8801700001006', 'Banani, Dhaka',      NOW(), NOW()),
